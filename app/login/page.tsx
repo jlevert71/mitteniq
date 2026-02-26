@@ -35,7 +35,7 @@ export default function LoginPage() {
           </label>
 
         <button
-  type="submi"
+  type="button"
   className="block w-full rounded-md bg-white px-4 py-2 text-center text-sm font-medium text-black hover:opacity-90"
   onClick={async () => {
     await fetch("/api/login", { method: "POST" });
