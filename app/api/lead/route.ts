@@ -5,13 +5,19 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(req: Request) {
   try {
-    // Optional JSON body (so we can include name/email/message later)
     const fd = await req.formData();
 
-const name = String(fd.get("name") ?? "");
-const email = String(fd.get("email") ?? "");
-const company = String(fd.get("company") ?? "");
-const note = String(fd.get("note") ?? "");
+    const name = String(fd.get("name") ?? "").trim();
+    const email = String(fd.get("email") ?? "").trim();
+    const company = String(fd.get("company") ?? "").trim();
+    const notes = String(fd.get("notes") ?? "").trim();
+
+    if (!name || !email) {
+      return NextResponse.json(
+        { ok: false, error: "Name and email are required." },
+        { status: 400 }
+      );
+    }
 
     const to = process.env.LEAD_TO_EMAIL;
     const from = process.env.LEAD_FROM_EMAIL;
@@ -31,18 +37,21 @@ const note = String(fd.get("note") ?? "");
     }
 
     await resend.emails.send({
-      from, // MUST be a string like "onboarding@resend.dev" or your verified domain sender
+      from,
       to,
-      subject: "New MittenIQ lead",
+      subject: `New MittenIQ Waitlist Lead - ${name}`,
       text:
-    `New lead from MittenIQ site.\n\n` +
-`Name: ${name}\n` +
-`Email: ${email}\n` +
-`Company: ${company}\n` +
-`Note: ${note}\n`,    
+        `New lead from MittenIQ site.\n\n` +
+        `Name: ${name}\n` +
+        `Email: ${email}\n` +
+        `Company: ${company || "N/A"}\n` +
+        `Notes: ${notes || "None provided"}\n`,
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      message: "Lead captured successfully.",
+    });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: e?.message ?? "Unknown error" },
@@ -51,11 +60,9 @@ const note = String(fd.get("note") ?? "");
   }
 }
 
-// If you VISIT /api/lead in the browser, that’s a GET request.
-// We return a helpful message instead of a confusing error.
 export async function GET() {
   return NextResponse.json(
-    { ok: false, error: "Use POST /api/lead (this endpoint is not meant to be opened in a browser)." },
+    { ok: false, error: "Use POST /api/lead (not meant for browser)." },
     { status: 405 }
   );
 }
