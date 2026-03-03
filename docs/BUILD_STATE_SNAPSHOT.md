@@ -1,6 +1,6 @@
 # Build State Snapshot (Current Reality)
 
-Last updated: 2026-03-02
+Last updated: 2026-03-03
 
 ---
 
@@ -30,11 +30,20 @@ Last updated: 2026-03-02
 - ✅ Upload list refresh:
   - GET /api/projects/{projectId}/uploads (200)
 
+### Authentication (Verified 2026-03-03)
+- ✅ Real credential-based login working
+- ✅ Passwords stored as bcrypt hashes (cost 12)
+- ✅ Login: POST /api/login (200 on valid credentials, 401 on invalid)
+- ✅ Setup: POST /api/setup (200 for approved emails, 403 for unapproved)
+- ✅ Session cookie: `mitten-auth` (httpOnly, 30-day expiry)
+- ✅ Admin user seeded via `prisma/seed.ts`
+- ✅ First-time user flow: admin pre-approves email, user sets own password at /setup
+
 ### Database / ORM
 - ✅ Prisma schema present and generating client
 - ✅ Postgres datasource configured
 - ✅ Models verified:
-  - User
+  - User (email, passwordHash, role added 2026-03-03)
   - Project
   - Upload
   - Sheet
@@ -55,6 +64,7 @@ Last updated: 2026-03-02
   - login
   - projects
   - savings
+  - setup (added 2026-03-03)
 
 ---
 
@@ -62,6 +72,7 @@ Last updated: 2026-03-02
 
 - 🟡 Public deployed environment status
 - 🟡 Cloudflare R2 production storage behavior
+- 🟡 Dashboard and other routes not yet protected by auth middleware
 
 ---
 
@@ -76,7 +87,6 @@ Stabilize project memory and documentation so development continuity survives ac
 ---
 
 ## Immediate Next Steps
-1) Audit remaining documentation files
-2) Populate KNOWN_ISSUES.md from historical problems
-3) Define ROADMAP.md using confirmed product direction
-4) Continue incremental feature development under documented conventions
+1) Add auth middleware to protect dashboard and other private routes
+2) Build admin UI or refine seed script workflow for managing users
+3) Continue incremental feature development under documented conventions

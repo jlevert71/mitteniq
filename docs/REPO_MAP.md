@@ -36,9 +36,10 @@ Top-level routes and folders:
 - api/         → server API routes
 - dashboard/   → dashboard UI area
 - intake/      → intake interface pages
-- login/       → authentication UI
+- login/       → authentication UI (real credential login as of 2026-03-03)
 - projects/    → project list and project detail pages
 - savings/     → savings-related UI pages
+- setup/       → first-time user account setup (added 2026-03-03)
 
 Global app files:
 - layout.tsx   → root application layout
@@ -57,8 +58,14 @@ Global app files:
 - app/api/uploads/[uploadId]/route.ts
 - app/api/uploads/[uploadId]/sheets/route.ts
 - app/api/debug/project/route.ts
-- app/api/login/route.ts
+- app/api/login/route.ts        → validates email + bcrypt password, sets session cookie
 - app/api/logout/route.ts
+- app/api/setup/route.ts        → allows pre-approved emails to set their own password (added 2026-03-03)
+
+## Prisma / Database
+- prisma/schema.prisma          → database schema
+- prisma/migrations/            → migration history
+- prisma/seed.ts                → admin user seeding + new user provisioning script
 
 ## Utility scripts (observed)
 - checkSheets.js

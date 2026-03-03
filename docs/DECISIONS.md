@@ -65,7 +65,6 @@ All sessions begin using:
 - CONVENTIONS.md
 - RESUME_PROMPT.md
 
-
 ---
 
 ## 2026-03-02 — Simplicity-First User Experience
@@ -117,3 +116,42 @@ The project is developed iteratively with continuous validation to avoid hidden 
 Impact:
 - Working behavior takes precedence over architectural elegance.
 - Verified endpoints and observable results define completion.
+
+---
+
+## 2026-03-03 — Credential-Based Authentication
+
+Decision:
+MittenIQ uses a custom credential-based auth system with bcrypt password hashing and httpOnly session cookies. No third-party auth provider (NextAuth, Clerk, Auth0, etc.) is used.
+
+Status:
+ACTIVE
+
+Reason:
+Keeps the auth implementation simple, transparent, and fully under project control without adding external service dependencies.
+
+Impact:
+- Passwords stored as bcrypt hashes (cost 12) in User.passwordHash
+- Session cookie named `mitten-auth` stores user ID (httpOnly, 30-day expiry)
+- Admin creates user accounts by running `prisma/seed.ts` locally
+- First-time users set their own password at /setup
+- Unapproved emails cannot create accounts
+
+---
+
+## 2026-03-03 — Admin-Controlled User Provisioning
+
+Decision:
+New user accounts are created by the administrator running a local seed script. Users then set their own passwords via the /setup page.
+
+Status:
+ACTIVE
+
+Reason:
+Keeps access control simple and fully administrator-controlled without requiring a self-registration flow or email sending service.
+
+Impact:
+- No public registration exists
+- Admin runs `prisma/seed.ts` to pre-approve an email
+- User visits /setup, enters their approved email, and chooses a password
+- Unapproved emails are rejected at /setup with a clear message

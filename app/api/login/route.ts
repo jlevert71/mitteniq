@@ -1,35 +1,35 @@
-// app/api/login/route.ts
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import bcrypt from "bcryptjs"
 
 export const runtime = "nodejs"
 
 export async function POST(req: Request) {
-  // If a valid auth cookie already exists, reuse it.
-  const existing = req.headers.get("cookie") || ""
-  const match = existing.match(/(?:^|;\s*)mitten-auth=([^;]+)/)
-  const cookieUserId = match?.[1] ? decodeURIComponent(match[1]) : null
+  const body = await req.json().catch(() => null)
+  const email = body?.email?.trim().toLowerCase()
+  const password = body?.password
 
-  if (cookieUserId) {
-    const user = await prisma.user.findUnique({
-      where: { id: cookieUserId },
-      select: { id: true },
-    })
-    if (user) {
-      // already logged in as a real user
-      return NextResponse.redirect(new URL("/dashboard", req.url))
-    }
+  if (!email || !password) {
+    return NextResponse.json({ error: "Email and password are required" }, { status: 400 })
   }
 
-  // Otherwise create a new user identity (placeholder until real auth)
-  const user = await prisma.user.create({ data: {} })
+  const user = await prisma.user.findUnique({ where: { email } })
 
-  const res = NextResponse.redirect(new URL("/dashboard", req.url))
+  if (!user || !user.passwordHash) {
+    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
+  }
+
+  const valid = await bcrypt.compare(password, user.passwordHash)
+  if (!valid) {
+    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
+  }
+
+  const res = NextResponse.json({ ok: true })
   res.cookies.set("mitten-auth", user.id, {
     path: "/",
     httpOnly: true,
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30, // 30 days
+    maxAge: 60 * 60 * 24 * 30,
   })
   return res
 }
