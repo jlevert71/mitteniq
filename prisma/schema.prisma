@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SheetType {
+  PLAN
+  DETAIL
+  NO_SCALE_NEEDED
+  UNKNOWN
+}
+
+enum ScaleStatus {
+  UNVERIFIED
+  VERIFIED
+  NO_SCALE_NEEDED
+}
+
+enum IntakeStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+enum UploadKind {
+  DRAWING
+  SPEC
+}
+
+enum UploadStatus {
+  PENDING
+  UPLOADED
+  FAILED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+
+  // PHASE 2: required
+  ownerId   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  uploads Upload[]
+}
+
+model Upload {
+  id        String       @id @default(cuid())
+  projectId String
+  kind      UploadKind
+  filename  String
+  r2Key     String
+  sizeBytes Int
+  mimeType  String
+  status    UploadStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Intake v1 fields
+  pageCount    Int?
+  isSearchable Boolean?
+  isRasterOnly Boolean?
+  intakeReport Json?
+  intakeStatus IntakeStatus @default(PENDING)
+  intakeError  String?
+
+  sheets Sheet[]
+}
+
+model Sheet {
+  id              String     @id @db.Text
+  uploadId         String
+  pageNumber       Int
+  sheetType        SheetType
+  scaleStatus      ScaleStatus
+  scaleConfidence  Int
+  notes            String?
+
+  createdAt DateTime @db.Timestamptz(6)
+  updatedAt DateTime @db.Timestamptz(6)
+
+  upload Upload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@index([uploadId])
+  @@unique([uploadId, pageNumber])
+}
