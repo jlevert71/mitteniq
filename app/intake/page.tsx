@@ -1,17 +1,8 @@
 "use client"
 
-import React, { useCallback, useMemo, useRef, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
-
-type UiStage = "IDLE" | "UPLOADING" | "ANALYZING" | "READY" | "FAILED"
-
-type UploadRow = {
-  fileName: string
-  fileSize: number
-  uploadId?: string
-  stage: UiStage
-  message?: string
-}
+import Link from "next/link"
 
 type IntakeReport = {
   uploadId?: string
@@ -24,8 +15,25 @@ type IntakeReport = {
   likelySearchable?: boolean
   likelyRasterHeavy?: boolean
   notes?: string[]
-  // allow extra keys without breaking UI
   [key: string]: any
+}
+
+type UploadPayload = {
+  id: string
+  projectId: string
+  kind: string
+  filename: string
+  sizeBytes: number
+  mimeType: string
+  status: string
+  createdAt: string
+  updatedAt: string
+  pageCount: number | null
+  isSearchable: boolean | null
+  isRasterOnly: boolean | null
+  intakeReport: any
+  intakeStatus: "PENDING" | "READY" | "FAILED"
+  intakeError: string | null
 }
 
 function formatBytes(n: number) {
@@ -38,86 +46,6 @@ function formatBytes(n: number) {
     i++
   }
   return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
-
-function isPdf(file: File) {
-  const byType = (file.type || "").toLowerCase() === "application/pdf"
-  const byName = (file.name || "").toLowerCase().endsWith(".pdf")
-  return byType || byName
-}
-
-/**
- * Presign responses can vary. We only require: uploadId + PUT url.
- */
-function extractPresign(data: any): { uploadId: string; putUrl: string } {
-  const uploadId =
-    data?.uploadId ??
-    data?.id ??
-    data?.upload?.id ??
-    data?.result?.uploadId ??
-    data?.result?.id
-
-  const putUrl =
-    data?.putUrl ??
-    data?.url ??
-    data?.presignedUrl ??
-    data?.signedUrl ??
-    data?.uploadUrl ??
-    data?.result?.putUrl ??
-    data?.result?.url ??
-    data?.result?.presignedUrl
-
-  if (!uploadId || !putUrl) {
-    throw new Error("Presign response missing uploadId and/or PUT URL.")
-  }
-  return { uploadId: String(uploadId), putUrl: String(putUrl) }
-}
-
-function extractAnalyzeReport(data: any): IntakeReport | null {
-  const report =
-    data?.report ??
-    data?.intakeReport ??
-    data?.result?.report ??
-    data?.result?.intakeReport ??
-    data?.upload?.report ??
-    data?.upload?.intakeReport ??
-    data?.upload?.intake ??
-    data?.intake
-
-  return (report ?? null) as IntakeReport | null
-}
-
-async function postJson<T = any>(url: string, body: any): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
-  })
-
-  const text = await res.text()
-  let data: any = null
-  try {
-    data = text ? JSON.parse(text) : null
-  } catch {
-    data = text
-  }
-
-  if (!res.ok) {
-    const msg =
-      (data && typeof data === "object" && (data.error || data.message)) ||
-      (typeof data === "string" ? data : null) ||
-      `Request failed (${res.status})`
-    throw new Error(String(msg))
-  }
-
-  // Respect ok:false on 200
-  if (data && typeof data === "object" && data.ok === false) {
-    throw new Error(
-      String(data.error || data.message || "Request failed (ok=false)")
-    )
-  }
-
-  return data as T
 }
 
 function Badge({
@@ -175,7 +103,6 @@ function Stat({
 }
 
 function scoreFromReport(r: IntakeReport) {
-  // Simple, explainable heuristic (UI-only).
   let score = 50
   if (r.isPdf) score += 15
   if (r.hasXref) score += 10
@@ -232,9 +159,7 @@ function ReportPanel({ report }: { report: IntakeReport }) {
   const searchLabel = isSearchable
     ? "Text-selectable (searchable)"
     : "Likely image-only (not searchable)"
-  const rasterLabel = isRasterHeavy
-    ? "Scan-heavy (image-based pages)"
-    : "Not scan-heavy"
+  const rasterLabel = isRasterHeavy ? "Scan-heavy (image-based pages)" : "Not scan-heavy"
   const structLabel =
     report.hasXref === true
       ? "PDF structure OK"
@@ -333,311 +258,138 @@ function ReportPanel({ report }: { report: IntakeReport }) {
 
 export default function IntakePage() {
   const searchParams = useSearchParams()
-  const inputRef = useRef<HTMLInputElement | null>(null)
+  const uploadId = (searchParams?.get("uploadId") || "").trim()
+
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [upload, setUpload] = useState<UploadPayload | null>(null)
+
   const reportRef = useRef<HTMLDivElement | null>(null)
 
-  // Pull projectId from URL (preferred): /intake?projectId=xxxx
-  const qpProjectId = (searchParams?.get("projectId") || "").trim()
-  const [projectId, setProjectId] = useState<string>(qpProjectId)
+  const report: IntakeReport | null = useMemo(() => {
+    if (!upload?.intakeReport) return null
+    // Ensure the report has uploadId set for display
+    const r = (upload.intakeReport || {}) as IntakeReport
+    return { uploadId: upload.id, ...r }
+  }, [upload])
 
-  const [dragOver, setDragOver] = useState(false)
-  const [row, setRow] = useState<UploadRow | null>(null)
-  const [report, setReport] = useState<IntakeReport | null>(null)
-
-  const projectIdEffective = (qpProjectId || projectId || "").trim()
-  const busy = !!row && (row.stage === "UPLOADING" || row.stage === "ANALYZING")
-
-  const canInteract = useMemo(() => {
-    return !busy && !!projectIdEffective
-  }, [busy, projectIdEffective])
-
-  // Auto-scroll to report when analysis completes
-  React.useEffect(() => {
-    if (row?.stage === "READY" && reportRef.current) {
-      reportRef.current.scrollIntoView({ behavior: "smooth", block: "start" })
+  async function load() {
+    if (!uploadId) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/uploads/${encodeURIComponent(uploadId)}`, { cache: "no-store" })
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || `Failed to fetch upload (${res.status})`)
+      }
+      setUpload(data.upload as UploadPayload)
+      // scroll into report when ready
+      setTimeout(() => reportRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0)
+    } catch (e: any) {
+      setUpload(null)
+      setError(String(e?.message || e || "Failed to load intake"))
+    } finally {
+      setLoading(false)
     }
-  }, [row?.stage])
+  }
 
-  const resetAll = useCallback(() => {
-    setRow(null)
-    setReport(null)
-    setDragOver(false)
-    if (inputRef.current) inputRef.current.value = ""
-  }, [])
-
-  const runWorkflow = useCallback(
-    async (file: File) => {
-      const pid = projectIdEffective
-      if (!pid) {
-        setRow({
-          fileName: file.name || "Selected file",
-          fileSize: file.size || 0,
-          stage: "FAILED",
-          message: "Missing projectId. Use /intake?projectId=... or paste it above.",
-        })
-        setReport(null)
-        return
-      }
-
-      if (!isPdf(file)) {
-        setRow({
-          fileName: file.name || "Selected file",
-          fileSize: file.size || 0,
-          stage: "FAILED",
-          message: "PDF files only.",
-        })
-        setReport(null)
-        return
-      }
-
-      setReport(null)
-      setRow({
-        fileName: file.name,
-        fileSize: file.size,
-        stage: "UPLOADING",
-        message: "Uploading…",
-      })
-
-      try {
-        // 1) Presign (project-scoped). Backend expects sizeBytes.
-        const presignData = await postJson("/api/uploads/presign", {
-          projectId: pid,
-          filename: file.name,
-          contentType: "application/pdf",
-          sizeBytes: file.size,
-        })
-        const { uploadId, putUrl } = extractPresign(presignData)
-
-        setRow((r) =>
-          r ? { ...r, uploadId, stage: "UPLOADING", message: "Uploading…" } : null
-        )
-
-        // 2) PUT to R2
-        const putRes = await fetch(putUrl, {
-          method: "PUT",
-          headers: { "Content-Type": "application/pdf" },
-          body: file,
-        })
-        if (!putRes.ok) {
-          throw new Error(`Upload to storage failed (${putRes.status}).`)
-        }
-
-        // 3) Complete
-        await postJson("/api/uploads/complete", { uploadId, projectId: pid })
-
-        // 4) Analyze
-        setRow((r) =>
-          r ? { ...r, uploadId, stage: "ANALYZING", message: "Analyzing…" } : null
-        )
-
-        const analyzeData = await postJson("/api/uploads/analyze", { uploadId, projectId: pid })
-        const nextReport = extractAnalyzeReport(analyzeData)
-
-        setRow((r) => (r ? { ...r, uploadId, stage: "READY", message: "Ready ✅" } : null))
-        setReport(nextReport)
-      } catch (e: any) {
-        const msg = String(e?.message || e || "Failed.")
-        setRow((r) =>
-          r
-            ? { ...r, stage: "FAILED", message: `Failed ❌  ${msg}` }
-            : { fileName: "Upload", fileSize: 0, stage: "FAILED", message: `Failed ❌  ${msg}` }
-        )
-        setReport(null)
-      }
-    },
-    [projectIdEffective]
-  )
-
-  const onPick = useCallback(
-    (f: File | null | undefined) => {
-      if (!f) return
-      if (busy) return
-      void runWorkflow(f)
-    },
-    [busy, runWorkflow]
-  )
-
-  const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-      if (!canInteract) return
-      setDragOver(false)
-      const files = Array.from(e.dataTransfer.files || [])
-      onPick(files[0])
-    },
-    [canInteract, onPick]
-  )
-
-  const openPicker = useCallback(() => {
-    if (!canInteract) return
-    inputRef.current?.click()
-  }, [canInteract])
+  useEffect(() => {
+    void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadId])
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Intake</h1>
-        <p className="mt-1 text-sm text-zinc-400">
-          Upload a PDF and run intake analysis automatically (project-scoped).
-        </p>
-      </div>
-
-      {/* Project Id */}
-      <div className="mb-4 rounded-2xl border border-zinc-800 bg-zinc-950/40 px-4 py-4">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="text-sm font-medium text-zinc-200">Project</div>
-            <div className="mt-1 text-xs text-zinc-400">
-              Required. Use <span className="font-mono">/intake?projectId=...</span> or paste it below.
-            </div>
-          </div>
-
-          <div className="flex w-full flex-col gap-2 md:w-[520px] md:flex-row md:items-center md:justify-end">
-            <input
-              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-600 disabled:opacity-70"
-              placeholder="projectId"
-              value={qpProjectId ? qpProjectId : projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              disabled={!!qpProjectId || busy}
-            />
-            <div className="text-xs text-zinc-400 md:w-[160px] md:text-right">
-              {projectIdEffective ? <span className="text-zinc-200">Set ✅</span> : "Missing"}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Dropzone */}
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={openPicker}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") openPicker()
-        }}
-        onDragEnter={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          if (!canInteract) return
-          setDragOver(true)
-        }}
-        onDragOver={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          if (!canInteract) return
-          setDragOver(true)
-        }}
-        onDragLeave={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          setDragOver(false)
-        }}
-        onDrop={onDrop}
-        className={[
-          "relative rounded-2xl border p-8 transition",
-          "bg-gradient-to-b from-[#071a2a] to-[#050f18]",
-          "border-[#1f3a52]",
-          dragOver ? "ring-2 ring-[#2b7bbb]" : "",
-          canInteract ? "cursor-pointer" : "cursor-not-allowed opacity-70",
-        ].join(" ")}
-      >
-        <div className="pointer-events-none absolute inset-0 rounded-2xl [background-image:radial-gradient(circle_at_1px_1px,rgba(43,123,187,0.18)_1px,transparent_0)] [background-size:22px_22px] opacity-40" />
-
-        <div className="relative flex flex-col items-center justify-center text-center">
-          <div className="text-base font-medium text-zinc-100">
-            {!projectIdEffective
-              ? "Enter Project ID to enable uploads"
-              : dragOver
-              ? "Drop to upload"
-              : "Drag & drop a PDF here"}
-          </div>
-          <div className="mt-1 text-sm text-zinc-300">
-            or <span className="text-[#7cc5ff]">click to browse</span>
-          </div>
-          <div className="mt-4 text-xs text-zinc-400">
-            PDF only. Upload → analyze runs automatically.
-          </div>
+      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Intake</h1>
+          <p className="mt-1 text-sm text-zinc-400">
+            View-only intake report for an uploaded file.
+          </p>
         </div>
 
-        <input
-          ref={inputRef}
-          type="file"
-          accept="application/pdf,.pdf"
-          className="hidden"
-          onChange={(e) => onPick(e.target.files?.[0])}
-        />
-      </div>
-
-      {/* Upload Row */}
-      <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950/40">
-        <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-          <div className="text-sm font-medium text-zinc-200">Upload</div>
-          <button
-            className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-900 disabled:opacity-50"
-            onClick={resetAll}
-            disabled={!row || busy}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/projects"
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
           >
-            Clear
+            Projects Dashboard
+          </Link>
+
+          <button
+            type="button"
+            onClick={load}
+            disabled={!uploadId || loading}
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-60"
+          >
+            {loading ? "Refreshing…" : "Refresh"}
           </button>
         </div>
+      </div>
 
-        {!row ? (
-          <div className="px-4 py-6 text-sm text-zinc-400">No file selected yet.</div>
-        ) : (
-          <div className="px-4 py-4">
-            <div className="grid grid-cols-12 gap-3 text-sm">
-              <div className="col-span-12 md:col-span-6">
-                <div className="text-zinc-200">{row.fileName}</div>
-                <div className="mt-1 text-xs text-zinc-400">{formatBytes(row.fileSize)}</div>
-              </div>
+      {!uploadId && (
+        <div className="rounded-2xl border border-rose-800/60 bg-rose-950/30 px-4 py-4 text-rose-100">
+          <div className="text-sm font-semibold">Missing uploadId</div>
+          <div className="mt-1 text-xs opacity-90">
+            Open intake from a project upload row so the URL includes{" "}
+            <span className="font-mono">?uploadId=...</span>
+          </div>
+        </div>
+      )}
 
-              <div className="col-span-12 md:col-span-3">
-                <div className="text-xs text-zinc-400">Upload ID</div>
-                <div className="mt-1 font-mono text-xs text-zinc-200">{row.uploadId ?? "—"}</div>
-              </div>
+      {error && (
+        <div className="mt-4 rounded-2xl border border-rose-800/60 bg-rose-950/30 px-4 py-4 text-rose-100">
+          <div className="text-sm font-semibold">Could not load intake</div>
+          <div className="mt-1 text-xs opacity-90">{error}</div>
+        </div>
+      )}
 
-              <div className="col-span-12 md:col-span-3">
-                <div className="text-xs text-zinc-400">Status</div>
-                <div className="mt-1 text-zinc-200">{row.message ?? row.stage}</div>
+      {upload && (
+        <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-zinc-200 truncate">{upload.filename}</div>
+              <div className="mt-1 text-xs text-zinc-400">
+                {upload.kind} • {formatBytes(upload.sizeBytes)} • {upload.mimeType}
               </div>
             </div>
 
-            {row.stage === "FAILED" && (
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <button
-                  className="rounded-lg bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-white disabled:opacity-50"
-                  onClick={openPicker}
-                  disabled={!canInteract}
-                >
-                  Try another PDF
-                </button>
-                <div className="text-xs text-zinc-400">Fix the message above, then retry.</div>
-              </div>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                label={`Intake: ${upload.intakeStatus}`}
+                tone={upload.intakeStatus === "READY" ? "good" : upload.intakeStatus === "FAILED" ? "bad" : "warn"}
+              />
+              <Badge label={`Pages: ${upload.pageCount ?? "—"}`} tone="neutral" />
+            </div>
+          </div>
+
+          {upload.intakeStatus === "FAILED" && (
+            <div className="mt-3 rounded-xl border border-rose-800/60 bg-rose-950/25 px-3 py-2 text-xs text-rose-100">
+              {upload.intakeError ? upload.intakeError : "Intake failed with no error message."}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div ref={reportRef} className="mt-6">
+        {loading && !upload && (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 px-4 py-6 text-sm text-zinc-400">
+            Loading…
           </div>
         )}
-      </div>
 
-      {/* Intake Report */}
-      <div ref={reportRef} className="mt-6">
-        {!row ? (
+        {upload && upload.intakeStatus !== "READY" && (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 px-4 py-6 text-sm text-zinc-400">
-            Upload a PDF to generate the intake report.
+            Intake status is <span className="font-semibold">{upload.intakeStatus}</span>. Report will appear when READY.
           </div>
-        ) : row.stage === "ANALYZING" ? (
+        )}
+
+        {upload && upload.intakeStatus === "READY" && report && <ReportPanel report={report} />}
+
+        {upload && upload.intakeStatus === "READY" && !report && (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 px-4 py-6 text-sm text-zinc-400">
-            Analyzing…
-          </div>
-        ) : report ? (
-          <ReportPanel report={report} />
-        ) : row.stage === "READY" ? (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 px-4 py-6 text-sm text-zinc-400">
-            READY, but no report payload was returned.
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 px-4 py-6 text-sm text-zinc-400">
-            Upload a PDF to generate the intake report.
+            READY, but no intakeReport was stored on this upload.
           </div>
         )}
       </div>

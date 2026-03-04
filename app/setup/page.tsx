@@ -28,7 +28,7 @@ export default function SetupPage() {
     });
     setLoading(false);
     if (res.ok) {
-      router.push("/dashboard");
+      router.push("/projects");
     } else {
       const data = await res.json();
       setError(data.error || "Setup failed");

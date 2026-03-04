@@ -10,53 +10,52 @@ Rules:
 
 ---
 
-## CURRENT (Active Work)
+# CURRENT (Active Work)
 
-Phase 1 — Intake Stability & Verification
+Phase 1 — Intake System Stabilization
 
-- Verify intake workflow consistency across Projects → Intake → Upload views
-- Confirm uploads always appear correctly in project intake page
-- Validate intake report reliability for real project files
-- Confirm sheet generation visibility and accuracy
-- Identify any gaps between intended folder architecture and current intake behavior
-
----
-
-## NEXT (Immediate Follow-Up)
-
-- Implement logical folder architecture creation during intake
-- Begin discipline detection for drawings
-- Begin specification division detection
-- Define intake report structure reflecting folder organization
-- Verify addenda detection capability (initial detection only)
+- Verify upload reliability across large PDF sets
+- Confirm intake analysis stability
+- Verify sheet generation accuracy
+- Improve intake error visibility
+- Implement agent route structure
 
 ---
 
-## UPCOMING (Near-Term Build)
+# NEXT (Immediate Follow-Up)
 
-- Addendum version handling logic
-- Document version tracking (original vs addendum revisions)
-- Intake report enhancements showing document classification results
-- Improve intake summary UI clarity
+- Implement agent route pages
+- Build sheet review interface
+- Improve intake error messaging
+- Begin document classification detection
+- Add drawing discipline detection
 
 ---
 
-## PARKED / IDEAS (Not Active Work)
+# UPCOMING (Near-Term Build)
 
-- Agent tier implementation
+- Addendum detection
+- Document version tracking
+- Intake summary improvements
+- Folder organization system
+
+---
+
+# PARKED / IDEAS
+
 - Vendor RFQ automation
-- Advanced estimating workflows
 - Automated estimating assistance
+- Cost database integration
+- Advanced estimating workflows
 
 ---
 
-## DONE
+# DONE
 
-- Documentation system established
-- ARCHITECTURE.md verified
-- REPO_MAP.md verified
-- BUILD_STATE_SNAPSHOT aligned with system reality
-- CONVENTIONS hardened
-- DECISIONS expanded
-- ROADMAP finalized (Phase 1 defined)
-- KNOWN_ISSUES documented
+- Documentation system created
+- Authentication system implemented
+- Upload pipeline verified
+- Cloudflare R2 storage integrated
+- Intake analyzer implemented
+- Sheet generation implemented
+- Secure file access route implemented

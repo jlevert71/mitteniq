@@ -22,9 +22,7 @@ function StatusBadge({ status }: { status: Upload["intakeStatus"] }) {
 
   if (status === "READY") {
     return (
-      <span
-        className={`${base} border-emerald-500/40 bg-emerald-500/10 text-emerald-400`}
-      >
+      <span className={`${base} border-emerald-500/40 bg-emerald-500/10 text-emerald-400`}>
         READY
       </span>
     )
@@ -39,9 +37,7 @@ function StatusBadge({ status }: { status: Upload["intakeStatus"] }) {
   }
 
   return (
-    <span
-      className={`${base} border-amber-500/40 bg-amber-500/10 text-amber-400`}
-    >
+    <span className={`${base} border-amber-500/40 bg-amber-500/10 text-amber-400`}>
       PENDING
     </span>
   )
@@ -66,10 +62,42 @@ function SummaryCard({
       : "border-white/10 bg-white/5"
 
   return (
-    <div className={`rounded-xl border ${accentStyles} p-4`}>
-      <div className="text-sm opacity-60">{label}</div>
-      <div className="text-2xl font-semibold mt-1">{value}</div>
+    <div className={`rounded-xl border ${accentStyles} p-3`}>
+      <div className="text-xs opacity-60">{label}</div>
+      <div className="text-xl font-semibold mt-1">{value}</div>
     </div>
+  )
+}
+
+function AgentTile({
+  title,
+  subtitle,
+  href,
+}: {
+  title: string
+  subtitle: string
+  href: string
+}) {
+  return (
+    <Link
+      href={href}
+      className="group rounded-2xl border border-white/10 bg-white/5 p-5 hover:bg-white/10 transition"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-white">{title}</div>
+          <div className="mt-1 text-xs text-white/60">{subtitle}</div>
+        </div>
+
+        <span className="shrink-0 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-white/80 group-hover:border-white/20">
+          Open →
+        </span>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-white/60">
+        Project-scoped agent workspace.
+      </div>
+    </Link>
   )
 }
 
@@ -85,14 +113,10 @@ export default function ProjectDetailPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   async function loadProject() {
-    const p = await fetch(`/api/projects/${projectId}`, {
-      cache: "no-store",
-    }).then((r) => r.json())
+    const p = await fetch(`/api/projects/${projectId}`, { cache: "no-store" }).then((r) => r.json())
     if (p.ok) setProject(p.project)
 
-    const u = await fetch(`/api/projects/${projectId}/uploads`, {
-      cache: "no-store",
-    }).then((r) => r.json())
+    const u = await fetch(`/api/projects/${projectId}/uploads`, { cache: "no-store" }).then((r) => r.json())
     if (u.ok) setUploads(u.uploads)
   }
 
@@ -136,7 +160,7 @@ export default function ProjectDetailPage() {
         const uploadId = String(presign.upload.id)
         const uploadUrl = String(presign.presignedUrl)
 
-        // ✅ Refresh immediately so the new upload shows up as PENDING
+        // refresh immediately so the new upload shows up as PENDING
         await loadProject()
 
         // PUT
@@ -146,7 +170,6 @@ export default function ProjectDetailPage() {
           body: file,
         })
         if (!putRes.ok) {
-          // If PUT fails, leave it pending; later we can mark FAILED here if you want.
           await loadProject()
           continue
         }
@@ -173,11 +196,9 @@ export default function ProjectDetailPage() {
           continue
         }
 
-        // ✅ Refresh again so READY flips in the list
+        // refresh again so READY flips in the list
         await loadProject()
       } catch {
-        // Silent per-file failure (we keep UI simple).
-        // Later we can add a "last error" toast without clutter.
         await loadProject()
       }
     }
@@ -191,96 +212,162 @@ export default function ProjectDetailPage() {
     handleFiles(e.dataTransfer.files)
   }
 
+  const agentBase = `/projects/${projectId}/agents`
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          {project ? project.name : "Loading…"}
-        </h1>
-        <div className="text-sm opacity-60 mt-1">Blueprint Intake Control</div>
-      </div>
-
-      {/* DROP BAY */}
-      <div
-        onClick={() => fileInputRef.current?.click()}
-        onDragOver={(e) => {
-          e.preventDefault()
-          setDragActive(true)
-        }}
-        onDragLeave={() => setDragActive(false)}
-        onDrop={handleDrop}
-        className={`mb-10 cursor-pointer rounded-2xl border-2 
-        ${
-          dragActive
-            ? "border-blue-500 bg-blue-500/5"
-            : "border-white/10 bg-white/[0.03]"
-        }
-        p-12 text-center transition`}
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px)",
-          backgroundSize: "40px 40px",
-        }}
-      >
-        <div className="text-lg font-medium">Drop Drawings or Specs Here</div>
-        <div className="text-sm opacity-60 mt-2">
-          Drag files here or click to browse. Intake runs automatically.
+      {/* Header */}
+      <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            {project ? project.name : "Loading…"}
+          </h1>
+          <div className="text-sm opacity-60 mt-1">Project workspace</div>
         </div>
 
-        {busy && (
-          <div className="text-sm mt-4 text-blue-400">Processing files…</div>
-        )}
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          hidden
-          onChange={(e) => {
-            if (e.target.files) handleFiles(e.target.files)
-          }}
-        />
-      </div>
-
-      {/* SUMMARY */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-        <SummaryCard label="Total" value={summary.total} />
-        <SummaryCard label="Ready" value={summary.ready} accent="emerald" />
-        <SummaryCard label="Pending" value={summary.pending} accent="amber" />
-        <SummaryCard label="Failed" value={summary.failed} accent="red" />
-      </div>
-
-      {/* UPLOAD LIST */}
-      <div className="space-y-4">
-        {uploads.map((u) => (
-          <div
-            key={u.id}
-            className="rounded-xl border border-white/10 bg-white/5 p-5"
+        <div className="flex items-center gap-2">
+          <Link
+            href="/projects"
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
           >
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="font-medium">{u.filename}</div>
-                <div className="text-sm opacity-60 mt-1">
-                  Pages: {u.pageCount ?? "Unknown"}
-                </div>
-              </div>
+            Projects Dashboard
+          </Link>
+        </div>
+      </div>
 
-              <div className="text-right space-y-2">
-                <StatusBadge status={u.intakeStatus} />
-                <Link
-  href={`/projects/${projectId}/intake?uploadId=${u.id}`}
-  className="text-sm text-blue-400 hover:underline"
->
-  Open Intake →
-</Link>
+      {/* Top grid: Agents + Upload */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Agents */}
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-semibold">Agents</div>
+              <div className="mt-1 text-xs text-white/60">
+                These live inside this project. Click an agent to open its workspace.
               </div>
             </div>
           </div>
-        ))}
 
-        {uploads.length === 0 && (
-          <div className="text-sm opacity-60">No uploads yet.</div>
-        )}
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <AgentTile title="Estimating Assistant" subtitle="Intake + organization + spec workflows" href={`${agentBase}/estimating-assistant`} />
+            <AgentTile title="Junior Estimator" subtitle="Early electrical quantities + checkpoints" href={`${agentBase}/junior-estimator`} />
+            <AgentTile title="Senior Estimator" subtitle="Scope logic + refinement" href={`${agentBase}/senior-estimator`} />
+            <AgentTile title="Chief Estimator" subtitle="Pricing/budget + executive outputs" href={`${agentBase}/chief-estimator`} />
+          </div>
+        </div>
+
+        {/* Upload */}
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-semibold">Upload drawings/specs</div>
+              <div className="mt-1 text-xs text-white/60">
+                Drag in PDFs or click to browse. Intake runs automatically.
+              </div>
+            </div>
+
+            {busy && (
+              <div className="text-xs text-blue-400 mt-1">
+                Processing…
+              </div>
+            )}
+          </div>
+
+          {/* DROP BAY (more compact) */}
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragActive(true)
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={handleDrop}
+            className={[
+              "mt-4 cursor-pointer rounded-2xl border-2 p-8 text-center transition",
+              dragActive ? "border-blue-500 bg-blue-500/5" : "border-white/10 bg-white/[0.03]",
+            ].join(" ")}
+            style={{
+              backgroundImage:
+                "linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px)",
+              backgroundSize: "32px 32px",
+            }}
+          >
+            <div className="text-base font-medium">Drop PDFs here</div>
+            <div className="text-xs opacity-60 mt-2">or click to browse</div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                if (e.target.files) handleFiles(e.target.files)
+              }}
+            />
+          </div>
+
+          {/* SUMMARY (compact) */}
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+            <SummaryCard label="Total" value={summary.total} />
+            <SummaryCard label="Ready" value={summary.ready} accent="emerald" />
+            <SummaryCard label="Pending" value={summary.pending} accent="amber" />
+            <SummaryCard label="Failed" value={summary.failed} accent="red" />
+          </div>
+        </div>
+      </div>
+
+      {/* Upload List */}
+      <div className="mt-8">
+        <div className="mb-3 flex items-end justify-between gap-4">
+          <div>
+            <div className="text-sm font-semibold">Uploads</div>
+            <div className="mt-1 text-xs text-white/60">Open a file to view its intake report.</div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {uploads.map((u) => (
+            <div
+              key={u.id}
+              className="rounded-xl border border-white/10 bg-white/5 p-5"
+            >
+              <div className="flex justify-between items-start gap-4">
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{u.filename}</div>
+                  <div className="text-sm opacity-60 mt-1">
+                    Pages: {u.pageCount ?? "Unknown"}
+                  </div>
+                </div>
+
+                <div className="text-right space-y-2 shrink-0">
+                  <StatusBadge status={u.intakeStatus} />
+
+                  <div className="flex flex-col items-end gap-1">
+                    <Link
+                      href={`/api/uploads/${u.id}/file`}
+                      className="text-sm text-blue-400 hover:underline"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open PDF →
+                    </Link>
+
+                    <Link
+                      href={`/intake?uploadId=${u.id}`}
+                      className="text-sm text-blue-400 hover:underline"
+                    >
+                      Open Intake →
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {uploads.length === 0 && (
+            <div className="text-sm opacity-60">No uploads yet.</div>
+          )}
+        </div>
       </div>
     </div>
   )

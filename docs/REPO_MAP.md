@@ -51,6 +51,7 @@ Global app files:
 - app/api/projects/route.ts
 - app/api/projects/[projectId]/route.ts
 - app/api/projects/[projectId]/uploads/route.ts
+- app/projects/[projectId]/agents/
 - app/api/uploads/presign/route.ts
 - app/api/uploads/complete/route.ts
 - app/api/uploads/analyze/route.ts
@@ -61,6 +62,7 @@ Global app files:
 - app/api/login/route.ts        → validates email + bcrypt password, sets session cookie
 - app/api/logout/route.ts
 - app/api/setup/route.ts        → allows pre-approved emails to set their own password (added 2026-03-03)
+- app/api/uploads/[uploadId]/file/route.ts
 
 ## Prisma / Database
 - prisma/schema.prisma          → database schema
@@ -72,3 +74,4 @@ Global app files:
 - checkUpload.js
 - describeSheet.js
 - enumLabels.js
+

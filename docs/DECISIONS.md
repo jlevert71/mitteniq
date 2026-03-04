@@ -155,3 +155,59 @@ Impact:
 - Admin runs `prisma/seed.ts` to pre-approve an email
 - User visits /setup, enters their approved email, and chooses a password
 - Unapproved emails are rejected at /setup with a clear message
+
+---
+
+## 2026-03-03 — Agents Are Project Scoped
+
+Decision:
+Agents exist inside projects rather than as global tools.
+
+Status:
+ACTIVE
+
+Reason:
+Estimating workflows are tied to a specific project’s drawings, specifications, and intake results.
+
+Impact:
+Agent routes use structure:
+
+/projects/[projectId]/agents/{agent}
+
+There will be no global agent hub.
+
+---
+
+## 2026-03-03 — Upload Pipeline Uses Presigned R2 Uploads
+
+Decision:
+Files are uploaded directly to Cloudflare R2 using presigned URLs rather than passing through the application server.
+
+Status:
+ACTIVE
+
+Reason:
+Prevents server bottlenecks and allows large PDF uploads.
+
+Impact:
+Upload workflow:
+
+presign → upload → complete → analyze
+
+Application server never handles file body during upload.
+
+---
+
+## 2026-03-03 — Analyzer Generates Sheet Records Automatically
+
+Decision:
+Sheet records are created automatically during intake analysis.
+
+Status:
+ACTIVE
+
+Reason:
+Allows downstream systems to work immediately with sheet-level data.
+
+Impact:
+Upload analyze step populates Sheet table using generate_series().
