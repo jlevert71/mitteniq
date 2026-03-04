@@ -1,5 +1,8 @@
 # Build State Snapshot (Current Reality)
 
+This file is the authoritative record of the current system state.
+If code, memory or other documentation disagree, this document takes precedence.
+
 Last updated: 2026-03-03
 
 ---

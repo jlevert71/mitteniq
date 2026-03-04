@@ -30,6 +30,15 @@ Session startup procedure:
 3. Respect DECISIONS.md as non-negotiable architecture constraints.
 4. Use REPO_MAP.md to understand folder responsibilities.
 
+Before proposing any code changes:
+
+1. Summarize the current system state in 5–8 bullet points.
+2. Identify the subsystem currently under development.
+3. Identify any risks or unknowns.
+4. Confirm the next safe incremental step.
+
+Do not generate code until this summary is confirmed.
+
 Current objective will be provided after this prompt.
 
 When ready, ask only for the minimum files required to continue safely.
