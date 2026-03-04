@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 
@@ -159,7 +159,9 @@ function ReportPanel({ report }: { report: IntakeReport }) {
   const searchLabel = isSearchable
     ? "Text-selectable (searchable)"
     : "Likely image-only (not searchable)"
-  const rasterLabel = isRasterHeavy ? "Scan-heavy (image-based pages)" : "Not scan-heavy"
+  const rasterLabel = isRasterHeavy
+    ? "Scan-heavy (image-based pages)"
+    : "Not scan-heavy"
   const structLabel =
     report.hasXref === true
       ? "PDF structure OK"
@@ -181,13 +183,21 @@ function ReportPanel({ report }: { report: IntakeReport }) {
           <div className="flex flex-wrap items-center gap-2">
             <Badge
               label={`Confidence: ${score}/100`}
-              tone={band === "GOOD" ? "good" : band === "PROBLEM" ? "bad" : "warn"}
+              tone={
+                band === "GOOD" ? "good" : band === "PROBLEM" ? "bad" : "warn"
+              }
             />
             <Badge label={searchLabel} tone={isSearchable ? "good" : "warn"} />
             <Badge label={rasterLabel} tone={isRasterHeavy ? "warn" : "good"} />
             <Badge
               label={structLabel}
-              tone={report.hasXref ? "good" : report.hasXref === false ? "warn" : "neutral"}
+              tone={
+                report.hasXref
+                  ? "good"
+                  : report.hasXref === false
+                  ? "warn"
+                  : "neutral"
+              }
             />
           </div>
         </div>
@@ -199,20 +209,39 @@ function ReportPanel({ report }: { report: IntakeReport }) {
 
       <div className="px-4 py-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Upload ID" value={report.uploadId ? report.uploadId : "—"} mono />
-          <Stat label="Pages" value={typeof report.pageCount === "number" ? report.pageCount : "—"} />
+          <Stat
+            label="Upload ID"
+            value={report.uploadId ? report.uploadId : "—"}
+            mono
+          />
+          <Stat
+            label="Pages"
+            value={typeof report.pageCount === "number" ? report.pageCount : "—"}
+          />
           <Stat
             label="File size (reported)"
-            value={typeof report.contentLength === "number" ? formatBytes(report.contentLength) : "—"}
+            value={
+              typeof report.contentLength === "number"
+                ? formatBytes(report.contentLength)
+                : "—"
+            }
           />
           <Stat
             label="Bytes analyzed"
-            value={typeof report.bytesAnalyzed === "number" ? formatBytes(report.bytesAnalyzed) : "—"}
+            value={
+              typeof report.bytesAnalyzed === "number"
+                ? formatBytes(report.bytesAnalyzed)
+                : "—"
+            }
           />
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <Stat label="Content type" value={report.contentType ? String(report.contentType) : "—"} mono />
+          <Stat
+            label="Content type"
+            value={report.contentType ? String(report.contentType) : "—"}
+            mono
+          />
           <Stat
             label="Next step"
             value={
@@ -256,7 +285,7 @@ function ReportPanel({ report }: { report: IntakeReport }) {
   )
 }
 
-export default function IntakePage() {
+function IntakeInner() {
   const searchParams = useSearchParams()
   const uploadId = (searchParams?.get("uploadId") || "").trim()
 
@@ -268,7 +297,6 @@ export default function IntakePage() {
 
   const report: IntakeReport | null = useMemo(() => {
     if (!upload?.intakeReport) return null
-    // Ensure the report has uploadId set for display
     const r = (upload.intakeReport || {}) as IntakeReport
     return { uploadId: upload.id, ...r }
   }, [upload])
@@ -278,14 +306,22 @@ export default function IntakePage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/uploads/${encodeURIComponent(uploadId)}`, { cache: "no-store" })
+      const res = await fetch(`/api/uploads/${encodeURIComponent(uploadId)}`, {
+        cache: "no-store",
+      })
       const data = await res.json().catch(() => null)
       if (!res.ok || !data?.ok) {
         throw new Error(data?.error || `Failed to fetch upload (${res.status})`)
       }
       setUpload(data.upload as UploadPayload)
-      // scroll into report when ready
-      setTimeout(() => reportRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0)
+      setTimeout(
+        () =>
+          reportRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          }),
+        0
+      )
     } catch (e: any) {
       setUpload(null)
       setError(String(e?.message || e || "Failed to load intake"))
@@ -349,7 +385,9 @@ export default function IntakePage() {
         <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div className="min-w-0">
-              <div className="text-sm font-medium text-zinc-200 truncate">{upload.filename}</div>
+              <div className="text-sm font-medium text-zinc-200 truncate">
+                {upload.filename}
+              </div>
               <div className="mt-1 text-xs text-zinc-400">
                 {upload.kind} • {formatBytes(upload.sizeBytes)} • {upload.mimeType}
               </div>
@@ -358,7 +396,13 @@ export default function IntakePage() {
             <div className="flex flex-wrap items-center gap-2">
               <Badge
                 label={`Intake: ${upload.intakeStatus}`}
-                tone={upload.intakeStatus === "READY" ? "good" : upload.intakeStatus === "FAILED" ? "bad" : "warn"}
+                tone={
+                  upload.intakeStatus === "READY"
+                    ? "good"
+                    : upload.intakeStatus === "FAILED"
+                    ? "bad"
+                    : "warn"
+                }
               />
               <Badge label={`Pages: ${upload.pageCount ?? "—"}`} tone="neutral" />
             </div>
@@ -366,7 +410,9 @@ export default function IntakePage() {
 
           {upload.intakeStatus === "FAILED" && (
             <div className="mt-3 rounded-xl border border-rose-800/60 bg-rose-950/25 px-3 py-2 text-xs text-rose-100">
-              {upload.intakeError ? upload.intakeError : "Intake failed with no error message."}
+              {upload.intakeError
+                ? upload.intakeError
+                : "Intake failed with no error message."}
             </div>
           )}
         </div>
@@ -381,11 +427,15 @@ export default function IntakePage() {
 
         {upload && upload.intakeStatus !== "READY" && (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 px-4 py-6 text-sm text-zinc-400">
-            Intake status is <span className="font-semibold">{upload.intakeStatus}</span>. Report will appear when READY.
+            Intake status is{" "}
+            <span className="font-semibold">{upload.intakeStatus}</span>. Report
+            will appear when READY.
           </div>
         )}
 
-        {upload && upload.intakeStatus === "READY" && report && <ReportPanel report={report} />}
+        {upload && upload.intakeStatus === "READY" && report && (
+          <ReportPanel report={report} />
+        )}
 
         {upload && upload.intakeStatus === "READY" && !report && (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 px-4 py-6 text-sm text-zinc-400">
@@ -394,5 +444,21 @@ export default function IntakePage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function IntakePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto w-full max-w-5xl px-4 py-8">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 px-4 py-6 text-sm text-zinc-400">
+            Loading intake…
+          </div>
+        </div>
+      }
+    >
+      <IntakeInner />
+    </Suspense>
   )
 }
