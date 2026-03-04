@@ -1,20 +1,17 @@
-import { NextResponse } from "next/server";
+// app/api/logout/route.ts
+import { NextResponse } from "next/server"
 
-export async function POST() {
-  // Redirect back to /login
-  const res = NextResponse.redirect(new URL("/login", "http://localhost:3000"));
-
-  // Clear the auth cookie
+export async function POST(req: Request) {
+  const res = NextResponse.redirect(new URL("/login", req.url))
   res.cookies.set("mitten-auth", "", {
     path: "/",
     httpOnly: true,
+    sameSite: "lax",
     maxAge: 0,
-  });
-
-  return res;
+  })
+  return res
 }
 
-// If you visit /api/logout directly in the browser, redirect too
-export async function GET() {
-  return NextResponse.redirect(new URL("/login", "http://localhost:3000"));
+export async function GET(req: Request) {
+  return NextResponse.redirect(new URL("/login", req.url))
 }

@@ -1,0 +1,26 @@
+-- AlterTable
+ALTER TABLE "Project" ADD COLUMN     "ownerId" TEXT;
+
+-- AlterTable
+ALTER TABLE "Sheet" ALTER COLUMN "sheetType" DROP DEFAULT,
+ALTER COLUMN "scaleStatus" DROP DEFAULT,
+ALTER COLUMN "scaleConfidence" DROP DEFAULT,
+ALTER COLUMN "createdAt" DROP DEFAULT,
+ALTER COLUMN "createdAt" SET DATA TYPE TIMESTAMPTZ(6),
+ALTER COLUMN "updatedAt" DROP DEFAULT,
+ALTER COLUMN "updatedAt" SET DATA TYPE TIMESTAMPTZ(6);
+
+-- AlterTable
+ALTER TABLE "Upload" ALTER COLUMN "updatedAt" DROP DEFAULT;
+
+-- CreateTable
+CREATE TABLE "User" (
+    "id" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+);
+
+-- AddForeignKey
+ALTER TABLE "Project" ADD CONSTRAINT "Project_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
