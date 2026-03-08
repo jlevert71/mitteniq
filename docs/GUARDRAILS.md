@@ -134,6 +134,14 @@ The system prioritizes:
 
 Any feature that increases complexity must justify its value.
 
+Do not allow LLM refinement to override deterministic sheet numbering.
+
+LLM may only modify:
+
+- sheet titles
+- page class
+- sheet subtype
+
 ---
 
 End of guardrails.

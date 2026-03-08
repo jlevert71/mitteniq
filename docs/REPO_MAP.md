@@ -75,3 +75,14 @@ Global app files:
 - describeSheet.js
 - enumLabels.js
 
+lib/intake/
+
+layer1-page-evidence.ts
+Extracts page-level detection signals.
+
+layer2-structure-inference.ts
+Infers document-wide structure and numbering patterns.
+
+types.ts
+Shared inference type definitions.
+

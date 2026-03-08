@@ -42,6 +42,10 @@ To understand the system safely, read documentation in the following order:
    * Critical system protections
    * areas that must not be modified casually
 
+ Architecture — Three-layer document intelligence model
+Intake Validation Log — real project validation results
+Known Issues — PDF extraction limitations  
+
 ---
 
 # Operational Documents

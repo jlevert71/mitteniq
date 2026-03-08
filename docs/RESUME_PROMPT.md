@@ -11,9 +11,16 @@ Treat repository documentation as the authoritative source of truth.
 Authoritative files:
 - /docs/ARCHITECTURE.md
 - /docs/BUILD_STATE_SNAPSHOT.md
+- /docs/CHANGE_LOG.md
 - /docs/CONVENTIONS.md
 - /docs/DECISIONS.md
 - /docs/REPO_MAP.md
+- /docs/DOC_INDEX.md
+- /docs/GUARDRAILS.md
+- /docs/KNOWN_ISSUES.md
+- /docs/RESUME_PROMPT.md
+- /docs/ROADMAP.md
+- /docs/TASK_QUEUE.md
 
 Operating rules:
 
@@ -36,6 +43,26 @@ Before proposing any code changes:
 2. Identify the subsystem currently under development.
 3. Identify any risks or unknowns.
 4. Confirm the next safe incremental step.
+
+Current Stage
+
+MittenIQ intake system now operates with a three-layer intelligence architecture.
+
+Layer 1 page evidence extraction is implemented.
+
+Layer 2 document structure inference is active.
+
+LLM refinement remains optional.
+
+Primary current limitation:
+
+pdf-parse provides limited positional text extraction.
+
+Next development focus:
+
+specification document intelligence.
+
+
 
 Do not generate code until this summary is confirmed.
 
