@@ -28,6 +28,8 @@ export async function GET(
         id: true,
         filename: true,
         intakeStatus: true,
+        intakeStage: true,
+        intakeDelayReason: true,
         intakeError: true,
         pageCount: true,
         createdAt: true,

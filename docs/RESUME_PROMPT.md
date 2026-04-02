@@ -1,71 +1,402 @@
-# MittenIQ Resume Prompt
-
-Use this at the start of ANY new AI session.
-
----
+MittenIQ Development Resume Prompt
 
 You are joining an existing software project.
 
-Treat repository documentation as the authoritative source of truth.
+The project is MittenIQ, an AI-driven estimating platform for construction contractors.
 
-Authoritative files:
-- /docs/ARCHITECTURE.md
-- /docs/BUILD_STATE_SNAPSHOT.md
-- /docs/CHANGE_LOG.md
-- /docs/CONVENTIONS.md
-- /docs/DECISIONS.md
-- /docs/REPO_MAP.md
-- /docs/DOC_INDEX.md
-- /docs/GUARDRAILS.md
-- /docs/KNOWN_ISSUES.md
-- /docs/RESUME_PROMPT.md
-- /docs/ROADMAP.md
-- /docs/TASK_QUEUE.md
+MittenIQ processes construction bid documents and is being built as a platform of AI-driven estimating workflows.
 
-Operating rules:
+Read These First
 
-1. Do NOT invent routes, database models, or environment variables.
-2. If unsure about implementation details, request the exact file path.
-3. Prefer small, sequential changes.
-4. Avoid refactoring unless explicitly requested.
-5. Assume the project follows incremental verified development.
+Before suggesting code changes or architecture decisions, read these docs in this order:
 
-Session startup procedure:
+docs/BUILD_STATE_SNAPSHOT.md
 
-1. Read BUILD_STATE_SNAPSHOT.md to understand current system state.
-2. Follow CONVENTIONS.md for workflow rules.
-3. Respect DECISIONS.md as non-negotiable architecture constraints.
-4. Use REPO_MAP.md to understand folder responsibilities.
+docs/ARCHITECTURE.md
 
-Before proposing any code changes:
+docs/DECISIONS.md
 
-1. Summarize the current system state in 5–8 bullet points.
-2. Identify the subsystem currently under development.
-3. Identify any risks or unknowns.
-4. Confirm the next safe incremental step.
+docs/TASK_QUEUE.md
 
-Current Stage
+docs/KNOWN_ISSUES.md
 
-MittenIQ intake system now operates with a three-layer intelligence architecture.
+docs/CONVENTIONS.md
 
-Layer 1 page evidence extraction is implemented.
+Treat repository docs as the authoritative source of continuity.
 
-Layer 2 document structure inference is active.
+Chat history can help provide context but should not override repository documentation.
 
-LLM refinement remains optional.
+Product Model
 
-Primary current limitation:
+MittenIQ follows this workflow model:
 
-pdf-parse provides limited positional text extraction.
+Upload Documents
+→ Intake / Setup
+→ Project Intelligence Layer
+→ Agent Workflows
+→ Estimator Decisions
 
-Next development focus:
+The system is intentionally AI-first, not a deterministic rules engine.
 
-specification document intelligence.
+AI Responsibilities
 
+AI performs document interpretation and reasoning:
 
+page meaning
 
-Do not generate code until this summary is confirmed.
+page class
 
-Current objective will be provided after this prompt.
+page subtype
 
-When ready, ask only for the minimum files required to continue safely.
+drawing identity when supportable
+
+section identity when supportable
+
+discipline inference
+
+electrical relevance
+
+concise evidence explanation
+
+confidence scoring
+
+review recommendations
+
+Code Responsibilities
+
+Code handles deterministic system behavior:
+
+file facts
+
+evidence preparation
+
+orchestration
+
+validation
+
+cleanup / reconciliation
+
+persistence
+
+trust controls
+
+permissions
+
+UI plumbing
+
+Current Development Phase
+
+Development is currently focused on stabilizing the intake pipeline.
+
+The immediate goal is to produce a reliable project-intelligence layer that downstream estimating agents can depend on.
+
+Priorities:
+
+reliability
+
+estimator usefulness
+
+truthful confidence
+
+architecture stability
+
+speed improvements later
+
+Current Intake Architecture
+
+The implemented intake pipeline now follows this structure:
+
+File Facts
+→ Router
+→ Page Preparation
+→ OCR (when needed)
+→ Page Image Generation
+→ AI Page Understanding
+→ Post-AI Normalization
+→ Continuity Reconciliation
+→ Anchor Construction
+→ Spec Section Grouping
+→ Trust Verification
+→ Persistence
+→ Intake Report
+
+Important note:
+
+Vision support already exists through PNG page rendering and image input to the AI request.
+
+The architecture is AI-first but post-AI cleanup is now a required layer.
+
+Current Verified Intake Behavior
+
+Large real documents have already completed successfully:
+
+Example runs:
+
+1232 page spec book
+
+432 page project manual/spec book
+
+These runs confirm:
+
+router works
+
+chunking works
+
+AI pipeline works
+
+persistence works
+
+intake reports generate correctly
+
+However, spec pathway output quality is still not acceptable.
+
+Observed problems:
+
+excessive section anchors
+
+incorrect blank page detection
+
+TOC / pagination text leaking into titles
+
+packet continuation naming inconsistent
+
+form pages incorrectly flagged as drawing review
+
+section start pages still generating review noise
+
+Example metrics from a recent spec run:
+
+pages: 432
+anchors: 242
+specSections: 119
+blankPages: 0
+reviewNeededPages: 6
+
+These numbers indicate fragmentation and classification shaping issues still exist.
+
+Spec pathway stabilization remains unfinished.
+
+New Critical Failure Discovered
+
+A second spec document revealed a hard pipeline failure.
+
+The intake run crashed with an OpenAI request error:
+
+400 We could not parse the JSON body of your request
+
+This occurred during a single page chunk request:
+
+chunkRoute: SPEC
+firstPage: 193
+lastPage: 193
+estimatedTokens: ~2100
+
+This indicates that the request payload generated by run-ai-intake.ts sometimes contains invalid JSON content.
+
+Possible causes include:
+
+control characters from OCR text
+
+invalid Unicode sequences
+
+corrupted text fragments
+
+malformed serialized prompt content
+
+This issue currently causes:
+
+Upload status: FAILED
+
+Because the intake pipeline aborts when the AI request fails.
+
+Immediate Stability Requirement
+
+The intake system must be hardened so that one malformed page cannot crash an entire upload.
+
+Required improvements:
+
+1. Prompt Payload Sanitization
+
+All text entering the AI request must be sanitized:
+
+Sources include:
+
+extracted PDF text
+
+OCR text
+
+line fragments
+
+header / footer hints
+
+layout evidence
+
+detected titles
+
+section titles
+
+Sanitization must remove:
+
+null characters
+
+illegal control characters
+
+isolated surrogate pairs
+
+corrupted unicode
+
+2. JSON Payload Preflight Validation
+
+Before sending the request to OpenAI:
+
+JSON.stringify(request)
+JSON.parse(serialized)
+
+If serialization fails, the request should never be sent.
+
+Instead:
+
+log diagnostic info
+
+mark the page as review required
+
+continue the intake run
+
+3. Single-Page Failure Isolation
+
+If an AI request returns a non-retryable 400 error:
+
+log the page number
+
+generate a fallback AI result
+
+mark the page as review required
+
+continue processing the rest of the document
+
+Uploads must never fail entirely because of one page.
+
+Current Spec Pathway Reality
+
+The spec pathway is now:
+
+architecturally stable but output-quality unstable.
+
+Two categories of work remain:
+
+A. Output shaping improvements
+
+Examples:
+
+packet continuation naming
+
+TOC-aware cleanup
+
+blank page detection
+
+section grouping refinement
+
+suppression of unnecessary review noise
+
+B. Pipeline hardening
+
+Examples:
+
+request payload sanitization
+
+JSON preflight validation
+
+per-page failure containment
+
+Both must be solved before moving on to the drawing pathway.
+
+Spec-Book Scaling Reality
+
+Large spec books can still stress the intake pipeline.
+
+Observed issues:
+
+chunk counts remain high
+
+payload size varies widely
+
+token usage spikes in text-heavy sections
+
+throughput still slower than target
+
+These are secondary concerns and should not be optimized until correctness improves.
+
+Future Agent Requirement
+
+The intake process must produce reusable project intelligence.
+
+Downstream estimating agents should not need to re-interpret the same document.
+
+Reusable outputs include:
+
+extracted text
+
+OCR text
+
+rendered page images
+
+AI page understanding
+
+section grouping
+
+packet grouping
+
+review signals
+
+structured document intelligence
+
+Avoid designs that would force agents to re-solve document understanding later.
+
+Working Style Requirements
+
+Follow these rules when assisting development:
+
+do not invent missing files
+
+do not assume helper functions exist
+
+always request the current file contents before structural edits
+
+preserve working behavior when possible
+
+make small sequential changes
+
+use full-file replacements when safer
+
+align changes with existing documentation
+
+clearly separate implemented behavior from planned behavior
+
+Trust Principle
+
+MittenIQ should always prefer truthful uncertainty over fake certainty.
+
+Refined rule:
+
+drawing pages require strict review when identity is unclear
+
+non-drawing pages should not trigger review unless identity is truly ambiguous
+
+estimator usefulness should guide review behavior
+
+What To Do First In A New Session
+
+After reading the documentation, request the current intake files before proposing changes.
+
+Relevant files usually include:
+
+lib/intake/run-ai-intake.ts
+lib/intake/run-intake-analysis.ts
+lib/intake/report-mappers.ts
+lib/intake/spec-section-grouping.ts
+lib/intake/types.ts
+app/intake/page.tsx
+
+Inspect the actual code before recommending changes.
+
+Avoid speculative rewrites until the current implementation is visible.

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireUserId } from "@/lib/auth"
 
 export const runtime = "nodejs"
 
@@ -8,6 +9,7 @@ export async function GET(
   ctx: { params: Promise<{ uploadId: string }> }
 ) {
   try {
+    const userId = await requireUserId()
     const { uploadId } = await ctx.params
 
     if (!uploadId) {
@@ -17,8 +19,11 @@ export async function GET(
       )
     }
 
-    const upload = await prisma.upload.findUnique({
-      where: { id: uploadId },
+    const upload = await prisma.upload.findFirst({
+      where: {
+        id: uploadId,
+        project: { ownerId: userId },
+      },
       select: { id: true },
     })
 
@@ -36,8 +41,21 @@ export async function GET(
         id: true,
         uploadId: true,
         pageNumber: true,
+
+        sheetNumber: true,
+        sheetName: true,
+        discipline: true,
+
+        pageClass: true,
+        sectionNumber: true,
+        sectionTitle: true,
+        isElectricalRelated: true,
+
+        sheetType: true,
+        scaleStatus: true,
         scaleConfidence: true,
         notes: true,
+
         createdAt: true,
         updatedAt: true,
       },
@@ -45,9 +63,12 @@ export async function GET(
 
     return NextResponse.json({ ok: true, sheets })
   } catch (err: any) {
+    const msg = err?.message ?? "Failed to fetch sheets"
+    const status = msg === "UNAUTHENTICATED" ? 401 : 500
+
     return NextResponse.json(
-      { ok: false, error: err?.message ?? "Failed to fetch sheets" },
-      { status: 500 }
+      { ok: false, error: msg },
+      { status }
     )
   }
 }

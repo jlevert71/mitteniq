@@ -8,7 +8,7 @@ import { r2, R2_BUCKET } from "@/lib/r2"
 export const runtime = "nodejs"
 
 export async function GET(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ uploadId: string }> }
 ) {
   try {
@@ -19,7 +19,9 @@ export async function GET(
       return NextResponse.json({ ok: false, error: "Missing uploadId" }, { status: 400 })
     }
 
-    // Fetch upload + project ownership in one query (prevents leaking existence)
+    const { searchParams } = new URL(req.url)
+    const wantsPageJson = searchParams.has("page")
+
     const upload = await prisma.upload.findFirst({
       where: {
         id: uploadId,
@@ -45,13 +47,25 @@ export async function GET(
       Bucket: R2_BUCKET,
       Key: upload.r2Key,
       ResponseContentType: upload.mimeType || "application/pdf",
-      // Optional, but helps browsers download with the original name when they choose to save:
       ResponseContentDisposition: `inline; filename="${upload.filename.replace(/"/g, "")}"`,
     })
 
-    const url = await getSignedUrl(r2, cmd, { expiresIn: 60 * 5 })
+    const signedUrl = await getSignedUrl(r2, cmd, { expiresIn: 60 * 5 })
 
-    return NextResponse.redirect(url)
+    if (wantsPageJson) {
+      const raw = searchParams.get("page")
+      const pageNumber = raw !== null && raw !== "" ? Number(raw) : NaN
+      if (!Number.isFinite(pageNumber) || pageNumber < 1) {
+        return NextResponse.json({ ok: false, error: "Invalid page" }, { status: 400 })
+      }
+      return NextResponse.json({
+        ok: true,
+        url: signedUrl,
+        page: Math.trunc(pageNumber),
+      })
+    }
+
+    return NextResponse.redirect(signedUrl)
   } catch (err: any) {
     const msg = err?.message ?? "Failed to open file"
     const status = msg === "UNAUTHENTICATED" ? 401 : 500

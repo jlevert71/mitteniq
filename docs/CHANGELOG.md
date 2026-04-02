@@ -261,3 +261,97 @@ First successful run produced:
 - `"candidatePages": 12`
 
 System now performs hybrid deterministic + LLM document interpretation as intended.
+
+2026-03-10
+
+Expanded intake pipeline:
+
+• added spec section grouping
+• added sheet detection preview
+• added AI analysis metadata to intake report
+• implemented bulk SQL sheet table rewrite
+• tested system against real addendum packets
+
+2026-03-12
+
+OCR pipeline stabilized.
+
+Changes:
+• Removed singleton Tesseract worker
+• Implemented per-page worker execution
+• Added worker initialization timeout
+• Added OCR recognition timeout
+• Enabled OCR progress logging
+
+Result:
+OCR execution no longer stalls and intake pipeline completes successfully.
+
+Identified next issue:
+AI intake pipeline exceeds OpenAI TPM limits on large spec books.
+Token-aware throttling and smaller chunk sizes planned.
+
+## 2026-03-13
+
+### Intake Stability
+
+- Added rate-limit retry/backoff handling to AI intake pipeline
+- Prevents failure when processing large specification books
+- Allows intake to complete when TPM limits are temporarily exceeded
+
+### Large Document Testing
+
+- Intake successfully processed a 166 page spec book
+- Stress testing initiated for 1000+ page specification books
+
+### Large Document Validation
+
+The intake system was tested with large real-world bid documents.
+
+Results:
+
+Spec Manual  
+• Pages: 1232  
+• Runtime: ~51 minutes  
+• OCR applied: 24 pages  
+• AI chunk count: ~303  
+
+Drawing Set  
+• Sheets: 116  
+• Runtime: ~11 minutes  
+• OCR applied: 24 pages  
+• Review pages: 1  
+
+The system successfully completed both runs without pipeline failure.
+
+---
+
+### TPM Retry Behavior Observed
+
+During processing, occasional TPM limit hits occurred.
+
+Example:
+
+429 Rate limit reached for gpt-4o-mini  
+TPM limit: 200,000 tokens/min  
+
+The retry system paused and successfully resumed chunk processing.
+
+No manual intervention was required.
+
+2026-03-15
+
+• Completed first large spec run (432 pages)
+• OCR fallback active
+• Vision page generation active
+• Spec router stable
+• Intake pipeline stable
+
+However:
+Spec pathway still inaccurate for estimator-facing output.
+
+Work continues on:
+section grouping
+packet continuation naming
+blank page detection
+review suppression
+

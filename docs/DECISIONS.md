@@ -1,7 +1,11 @@
+# docs/DECISIONS.md
+
 # Architectural Decisions Log
 
+Last updated: 2026-03-19
+
 Purpose:  
-Record permanent product and engineering decisions so they are not accidentally reversed later.
+Record durable product and engineering decisions that should not be casually reversed.
 
 Only confirmed decisions belong here.
 
@@ -10,162 +14,68 @@ Only confirmed decisions belong here.
 ## 2026-03-02 — Intake Gates Downstream Features
 
 Decision:  
-Uploaded documents must pass Intake processing before downstream workflows are available.
+Uploaded documents must pass intake processing before downstream workflows are available.
 
 Status:  
 ACTIVE
 
 Reason:  
-Prevents unreliable data from entering estimating workflows.
-
-Impact:
-- Upload lifecycle includes analyze step.
-- Dashboard behavior depends on intake readiness.
-
-Evidence:
-Verified working upload pipeline:
-- POST /api/uploads/presign -> 200
-- POST /api/uploads/complete -> 200
-- POST /api/uploads/analyze -> 200
+Prevents unreliable data from feeding later estimating workflows.
 
 ---
 
 ## 2026-03-02 — Incremental Build Strategy
 
 Decision:  
-MittenIQ will be built through small, sequential, verifiable steps rather than large refactors.
+MittenIQ will be built through small, verifiable steps instead of large speculative rewrites.
 
 Status:  
 ACTIVE
 
 Reason:  
-Reduces breakage and allows continuous verification during development.
-
-Impact:
-- One change tested at a time.
-- Documentation updated daily.
-- No speculative refactors.
+Reduces breakage and makes architectural pivots safer.
 
 ---
 
-## 2026-03-02 — Documentation as System Memory
+## 2026-03-02 — Documentation Is Project Memory
 
 Decision:  
-Repository documentation is the authoritative memory of the project rather than chat history.
+Repository documentation is the authoritative continuity layer rather than chat history.
 
 Status:  
 ACTIVE
 
 Reason:  
-AI sessions reset context; repository docs preserve continuity across months.
-
-Impact:  
-All sessions begin using:
-- BUILD_STATE_SNAPSHOT.md
-- CONVENTIONS.md
-- RESUME_PROMPT.md
+The project will span many sessions and architectural changes.
 
 ---
 
 ## 2026-03-02 — Simplicity-First User Experience
 
 Decision:  
-The MittenIQ interface must remain usable by non-technical construction office staff with minimal training.
+MittenIQ must remain usable by non-technical estimators and office staff with minimal training.
 
 Status:  
 ACTIVE
 
 Reason:  
-Target users are estimators and office personnel, not software specialists.
+Target users are construction people, not software people.
 
-Impact:
-- Interfaces prioritize clarity over feature density.
-- Workflow steps must be obvious and linear.
-- Automation must not hide critical decisions from users.
-
----
-
-## 2026-03-02 — Intake as System Foundation
-
-Decision:  
-File Intake is the first required system phase and establishes project readiness before additional capabilities are introduced.
-
-Status:  
-ACTIVE
-
-Reason:  
-Reliable estimating requires validated inputs before analysis or automation.
-
-Impact:
-- Intake stability prioritized before adding advanced features.
-- Upload → Intake → Sheet creation is treated as core infrastructure.
-
----
-
-## 2026-03-02 — Incremental Verification Over Speed
-
-Decision:  
-Features are considered complete only after real local verification, not theoretical correctness.
-
-Status:  
-ACTIVE
-
-Reason:  
-The project is developed iteratively with continuous validation to avoid hidden failures.
-
-Impact:
-- Working behavior takes precedence over architectural elegance.
-- Verified endpoints and observable results define completion.
-
----
-
-## 2026-03-03 — Credential-Based Authentication
-
-Decision:  
-MittenIQ uses a custom credential-based auth system with bcrypt password hashing and httpOnly session cookies.
-
-Status:  
-ACTIVE
-
-Reason:  
-Keeps authentication simple and fully under project control.
-
-Impact:
-- bcrypt password hashes (cost 12)
-- session cookie `mitten-auth`
-- 30-day expiry
-- admin seed-based user creation
-
----
-
-## 2026-03-03 — Admin-Controlled User Provisioning
-
-Decision:  
-New user accounts are created by the administrator running a local seed script.
-
-Status:  
-ACTIVE
-
-Impact:
-- No public registration
-- Admin pre-approves users
-- Users create password via `/setup`
+Impact:  
+Workflow clarity beats feature density.
 
 ---
 
 ## 2026-03-03 — Agents Are Project Scoped
 
 Decision:  
-Agents exist inside projects rather than as global tools.
+Agents exist inside projects, not as global tools.
 
 Status:  
 ACTIVE
 
-Impact:
-
-Route pattern:
-
-/projects/[projectId]/agents/{agent}
+Impact:  
+Route pattern remains project-based.
 
 ---
 
@@ -177,268 +87,491 @@ Files upload directly to Cloudflare R2 via presigned URLs.
 Status:  
 ACTIVE
 
-Impact:
-
-presign → upload → complete → analyze
-
 ---
 
-## 2026-03-03 — Analyzer Generates Sheet Records Automatically
+## 2026-03-03 — Analyzer Persists Page-Level Results
 
 Decision:  
-Sheet records are generated automatically during intake analysis.
+Intake analysis persists page-level results to the `Sheet` table.
 
 Status:  
 ACTIVE
 
-Impact:
+Reason:  
+Downstream workflows need durable page-level intelligence.
 
-Analyzer populates Sheet table.
+Important note:  
+`Sheet` is currently the active persistence layer even though it now stores broader page intelligence than drawing sheets alone.
 
 ---
 
-## 2026-03-04 — Supabase Pooler Required for Serverless Runtime
+## 2026-03-05 — Purchased Functions Panel Is the Current Report Hub
 
 Decision:  
-Production must use Supabase PgBouncer pooler.
+Project reports are currently accessed through the Purchased Functions area.
 
 Status:  
 ACTIVE
 
-Impact:
-
-Connection format must use port **6543** with PgBouncer parameters.
+Important note:  
+This is a current product/UI decision, not a reason to couple agent intelligence to localStorage forever.
 
 ---
 
-## 2026-03-04 — Production Development May Continue Despite Hosting Issues
+## 2026-03-06 — Server-Side Extraction Uses `pdf-parse`
 
 Decision:  
-Feature development may continue locally even if production deployment is degraded.
+Server-side PDF extraction uses `pdf-parse` in the current build.
 
 Status:  
 ACTIVE
 
-Impact:
-- Local development is authoritative environment
-- Infrastructure tracked separately
+Reason:  
+This proved more workable in the current server environment than the earlier approach.
+
+Important note:  
+This does not mean `pdf-parse` alone is considered sufficient for long-term document understanding.
 
 ---
 
-## 2026-03-05 — Purchased Functions Hub Is the Primary Report Access Point
+## 2026-03-07 — Construction Document Understanding Must Not Depend on Strict Geometry
 
 Decision:  
-Project reports are accessed through the Purchased Functions panel.
+The system must continue functioning even when positional text extraction is incomplete or unreliable.
 
 Status:  
 ACTIVE
 
----
+Reason:  
+Real-world bid packages vary too much for positional extraction to serve as the main understanding engine.
 
-## 2026-03-05 — Project Workspace Prioritizes Report Hub Over Upload Panel
-
-Decision:  
-Workspace layout prioritizes the Purchased Functions panel.
-
-Status:  
-ACTIVE
+Impact:  
+Layout hints are supporting evidence, not the primary brain.
 
 ---
 
-## 2026-03-05 — Purchased Functions Use Temporary Local Storage Stub
+## 2026-03-08 — Intake Uses Chat Completions API
 
 Decision:  
-Purchased functions temporarily stored in localStorage.
-
-Status:  
-ACTIVE
-
-Key format:
-
-miq:purchasedFunctions:{projectId}
-
----
-
-## 2026-03-05 — Estimating Assistant Functions Must Be Meaningful Purchases
-
-Decision:  
-Purchases must represent meaningful workflows rather than small fragmented tools.
+The intake LLM integration uses the Chat Completions API.
 
 Status:  
 ACTIVE
 
 ---
 
-## 2026-03-05 — File Intake Analysis and Sheet Extraction Are Combined
+## 2026-03-08 — Intake Is AI-First for Document Understanding
 
 Decision:  
-File Intake Analysis and Sheet Extraction are delivered as a single function.
+MittenIQ intake is officially AI-first for document understanding.
 
 Status:  
 ACTIVE
 
-Function ID:
+Reason:  
+Construction document variation is too broad for deterministic interpretation logic to remain the architectural center.
 
-intake-sheet-setup
+Impact:  
+Code is limited to:
+- evidence preparation
+- validation
+- persistence
+- trust controls
+- UI/plumbing
+- permissions
+
+AI owns document meaning.
 
 ---
 
-## 2026-03-05 — Intake Page Must Explain Confidence in Plain English
+## 2026-03-08 — Intake / Setup Is the First AI Project-Understanding Pass
 
 Decision:  
-Confidence values must include plain-English explanation when below 100%.
+Intake is not merely sheet detection. It is the first AI pass that builds reusable project intelligence for later agents.
+
+Status:  
+ACTIVE
+
+Reason:  
+The product is a platform of estimating agents, not a single-purpose parser.
+
+---
+
+## 2026-03-08 — Review-Required Is Preferred Over Fake Certainty
+
+Decision:  
+When the system cannot support a confident answer, it should escalate rather than force a guess.
+
+Status:  
+ACTIVE
+
+Reason:  
+Transparency is more important than pretending the system knows more than it does.
+
+---
+
+## 2026-03-08 — Intake Must Capture Signals Useful to Later Agents
+
+Decision:  
+Intake must produce reusable project intelligence that later agents can query instead of repeatedly re-reading the same files.
+
+Status:  
+ACTIVE
+
+Reason:  
+Future value depends on reusable intelligence, not repeated one-off prompting.
+
+Impact:  
+Expensive work should produce reusable outputs.
+
+---
+
+## 2026-03-09 — Hybrid Page Evidence Pipeline Is Required
+
+Decision:  
+MittenIQ intake will use a hybrid evidence pipeline combining native text, OCR, images, layout hints, and file facts before AI interpretation.
+
+Status:  
+ACTIVE
+
+Reason:  
+No single evidence source is reliable enough across real bid packages.
+
+---
+
+## 2026-03-09 — Routing Will Direct Pages Toward Spec-Oriented vs Drawing-Oriented Analysis
+
+Decision:  
+MittenIQ will use routing to direct likely text/spec pages and likely drawing pages toward different preparation and analysis behavior.
+
+Status:  
+ACTIVE
+
+Reason:  
+Different page types need different evidence strategies for both speed and accuracy.
+
+---
+
+## 2026-03-09 — 8.5 x 11 Is a Strong Hint Toward Spec/Text Paths
+
+Decision:  
+8.5 x 11 pages should generally be treated as spec/text-document candidates unless evidence suggests otherwise.
+
+Status:  
+ACTIVE
+
+Important note:  
+This is a strong hint, not an absolute rule.
+
+---
+
+## 2026-03-09 — 11 x 17 and Larger Is a Strong Hint Toward Drawing/Vision Paths
+
+Decision:  
+11 x 17 and larger pages should generally be treated as drawing candidates unless evidence suggests otherwise.
+
+Status:  
+ACTIVE
+
+Important note:  
+This is a strong hint, not an absolute rule.
+
+---
+
+## 2026-03-09 — Drawing Pages Should Lean on Vision + OCR + Native Text Together
+
+Decision:  
+Drawing understanding should rely on combined evidence rather than title-block regex logic.
+
+Status:  
+ACTIVE
+
+Reason:  
+Drawing identity depends heavily on visual structure and title-block evidence.
+
+---
+
+## 2026-03-09 — Suspicious Spec Pages Should Get Deeper Inspection Before Human Escalation
+
+Decision:  
+Ambiguous or abnormal spec/document pages should receive deeper AI inspection before immediately defaulting to human review.
+
+Status:  
+ACTIVE
+
+Reason:  
+Some pages that look weak to extraction can still be understood when image evidence is used.
+
+---
+
+## 2026-03-09 — Drawing-Like Pages Missing Reliable Identity Should Favor Review
+
+Decision:  
+If a page appears drawing-like but reliable identity cannot be supported, trust should be reduced and review should be favored.
+
+Status:  
+ACTIVE
+
+Reason:  
+Drawing pages usually carry stronger identity evidence than ordinary text pages.
+
+---
+
+## 2026-03-13 — Page Image Generation Must Be Decoupled from OCR
+
+Decision:  
+Page image generation is now officially considered its own pipeline responsibility and must be separated from OCR ownership.
 
 Status:  
 ACTIVE
 
 ---
 
-## 2026-03-06 — Replace pdfjs-dist with pdf-parse for Server Extraction
+## 2026-03-13 — Router Must Become a First-Class Pipeline Stage
 
-Decision:
+Decision:  
+Routing logic must be promoted from embedded heuristics into a formal pipeline stage.
 
-Server-side extraction uses **pdf-parse** instead of pdfjs-dist.
+Status:  
+ACTIVE
 
-Status:
+---
 
+## 2026-03-13 — OCR Is a Supporting Evidence Layer, Not the Main Understanding Engine
+
+Decision:  
+OCR must remain a selective supporting evidence layer.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-13 — Rate-Limit Resilience Is an Architecture Requirement
+
+Decision:  
+TPM-aware retry/backoff, payload control, and chunking discipline are required architecture.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-14 — Analyze Route Must Be a Thin Entrypoint
+
+Decision:  
+Analyze route should be an API entrypoint, not the intake implementation.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-14 — Page Image Generation Is an Independent Pipeline Stage
+
+Decision:  
+Page image generation is its own stage.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-14 — Router Computes File Default + Page Overrides
+
+Decision:  
+Routing includes file default and per-page override behavior.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-14 — OCR Fallback Must Be Route-Aware
+
+Decision:  
+OCR selection is route-aware with PRIMARY and ESCALATION tiers.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-15 — Deterministic Layers Must Be Non-Obstructive to AI
+
+Decision:  
+Deterministic code must not constrain AI interpretation.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-15 — AI Owns Continuity and Relationship Reasoning
+
+Decision:  
+Continuity reasoning remains AI-driven.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-17 — Heavy AI/OCR Intake Path Remains Required Fallback
+
+Decision:  
+Heavy path remains necessary fallback coverage.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-17 — Spec Fast Paths Are Additive, Not Replacements
+
+Decision:  
+Fast paths augment but do not replace fallback.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-17 — Fast-Path Eligibility Is Structure-First
+
+Decision:  
+Eligibility is based on structure, not CSI-only.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-17 — Bookmark-Based Outline Extraction Is Approved
+
+Decision:  
+pdfjs outline extraction is a valid fast-path foundation.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-17 — Multi-Profile Outline Normalization Is Required
+
+Decision:  
+Support CSI, MDOT, ARTICLE, GENERIC profiles.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-17 — Intake Work Comes Before New Features
+
+Decision:  
+Focus remains on intake stabilization and routing.
+
+Status:  
+ACTIVE
+
+---
+
+## 2026-03-19 — Upload Deletion Uses RESTful DELETE Route
+
+Decision:  
+Uploads are deleted via `DELETE /api/uploads/[uploadId]`.
+
+Status:  
 ACTIVE
 
 Reason:
-
-pdfjs-dist worker failures inside Next.js server runtime.
-
-Impact:
-
-- extraction layer replaced
-- classification unchanged
-- intake report schema unchanged
+- aligns with REST patterns
+- reuses ownership pattern from GET
+- avoids duplicate logic routes
 
 ---
 
-## 2026-03-07 — Hybrid Deterministic + LLM Intake Architecture
+## 2026-03-19 — Upload Deletion Order Is DB First, Then R2
 
-Decision:
+Decision:  
+Delete DB record first, then delete R2 object.
 
-The intake system uses a **deterministic extraction pipeline with optional LLM refinement**.
-
-Status:
-
-ACTIVE
-
-Architecture:
-
-PDF Upload  
-→ Deterministic Text Extraction  
-→ Deterministic Sheet Detection  
-→ Classification  
-→ Optional LLM refinement
-
-LLM location:
-
-lib/llm-intake.ts
-
-Model:
-
-gpt-4o-mini
-
-Environment flag:
-
-MITTENIQ_LLM_INTAKE_ENABLED
-
-Reason:
-
-Deterministic extraction provides stability and reproducibility.  
-LLM assistance improves recognition of ambiguous or irregular documents.
-
-Safety Rule:
-
-Deterministic results remain authoritative unless confidence is low.
-
-Impact:
-
-- Hybrid architecture improves reliability
-- Prevents hallucinated sheet detection
-- Enables future document intelligence capabilities
-
-## 2026-03-07 — Adopt Three-Layer Intake Intelligence Model
-
-Decision:
-
-MittenIQ intake system will use a layered inference architecture.
-
-Reason:
-
-Construction documents vary widely across firms and formats.  
-A deterministic-only system cannot generalize reliably.
-
-Impact:
-
-Improved extensibility and reasoning capability.
-
-Tradeoff:
-
-Requires additional compute and more complex pipeline.
-
----
-
-## 2026-03-07 — Accept Multiple Sheet Number Families
-
-Decision:
-
-Sheet numbering detection must support multiple discipline prefixes.
-
-Examples:
-
-E-, I-, T-, C-, A-, M-
-
-Reason:
-
-Large drawing sets frequently contain mixed disciplines.
-
----
-
-## 2026-03-07 — Do Not Depend on Strict Layout Geometry
-
-Decision:
-
-System must function without reliable positional text extraction.
-
-Reason:
-
-pdf-parse often does not provide reliable text coordinates.
-
-Mitigation:
-
-Fallback text-region inference.
-
-## 2026-03-08 — Use Chat Completions API for Intake LLM
-
-Decision:
-
-The intake LLM integration will use the **Chat Completions API** rather than the Responses API.
-
-Status:
-
+Status:  
 ACTIVE
 
 Reason:
+- prevents broken DB references
+- orphaned storage is safer than orphaned DB rows
 
-Responses API caused model compatibility issues and local SDK validation failures.
+---
 
-Chat Completions API provides stable support for:
+## 2026-03-19 — Upload Deletion Is Blocked While Processing
 
-- gpt-4o-mini
-- structured JSON responses
-- predictable token usage
+Decision:  
+Uploads in `PROCESSING` state cannot be deleted.
 
-Impact:
+Status:  
+ACTIVE
 
-OpenAI calls must use:
+Reason:
+- avoids race conditions with detached intake execution
+- avoids introducing job cancellation complexity prematurely
 
-client.chat.completions.create()
+---
 
-Responses API should not be used in MittenIQ intake logic unless specifically required for reasoning models.
+## 2026-03-19 — No Intake Re-Run Yet
 
-Safety:
+Decision:  
+Re-run intake is intentionally not implemented yet.
 
-Requests must remain below model token limits using candidate page caps and truncated evidence text.
+Status:  
+ACTIVE
+
+Reason:
+- avoid expanding scope during intake stabilization phase
+- focus remains on correctness and architecture first
+
+---
+
+## 2026-03-19 — Drawing Classification and Drawing Identity Are Separate Problems
+
+Decision:  
+Drawing page classification and drawing identity extraction are treated as separate improvement areas.
+
+Status:  
+ACTIVE
+
+Reason:
+- classification is mostly working
+- identity extraction still fails independently
+- combining fixes leads to unstable behavior
+
+---
+
+## 2026-03-19 — Title Block Interpretation Remains AI-Driven
+
+Decision:  
+Do not introduce deterministic title-block parsing logic.
+
+Status:  
+ACTIVE
+
+Reason:
+- title blocks vary too widely across real drawings
+- brittle parsing would regress long-term reliability
+- fixes should come from better prompts and evidence weighting
+
+---
+
+## 2026-03-19 — Upload List Refresh Uses Existing Load Pattern
+
+Decision:  
+UI refresh after delete uses existing `loadProject()`.
+
+Status:  
+ACTIVE
+
+Reason:
+- avoids introducing new state or polling systems
+- keeps UI behavior simple and consistent
