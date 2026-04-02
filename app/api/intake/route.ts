@@ -1,4 +1,10 @@
-import { NextResponse } from "next/server";
+/**
+ * LEGACY — not used by the MittenIQ in-app flow (no `fetch` to `/api/intake` under `app/`).
+ * Real PDF intake runs via `/api/uploads/*` and `lib/intake/run-intake-analysis.ts`.
+ * May still be callable by external tools or bookmarks; kept until intake_v2 migration confirms no callers.
+ * Do not build new product features on this route without an explicit decision.
+ */
+import { NextResponse } from "next/server"
 
 export async function POST(req: Request) {
   try {

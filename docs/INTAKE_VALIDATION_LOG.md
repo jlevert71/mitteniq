@@ -138,3 +138,136 @@ A change should only be accepted if it:
 - does not introduce new failures in previously correct pages
 
 This prevents regressions and keeps the intake engine stable as it evolves.
+
+## 2026-03-07 Validation Pass
+
+Test Sets:
+
+1. Owosso project drawings
+2. Alternate drawing set
+
+Results:
+
+Drawing sheets:
+
+PASS
+Sheet numbers remain highly reliable.
+
+Title detection:
+
+PARTIAL PASS
+Caption-style sheets still difficult.
+
+Example:
+
+E601 — grounding detail sheet
+
+Specification documents:
+
+FAIL
+Current extraction insufficient.
+
+Notes:
+
+Future improvements required for:
+
+- specification heading extraction
+- front-end document classification
+
+## Addendum packet test
+
+Document type:
+municipal water treatment plant electrical upgrades addendum
+
+Pages included:
+bid letter
+clarifications
+legacy electrical drawings
+
+Results:
+drawings correctly detected
+front-end pages detected
+print sizes correctly identified
+
+Issues:
+title extraction occasionally incorrect
+sheet numbers missed on some drawings
+
+### Test Run — 166 Page Spec Book
+Date: 2026-03-13
+
+Result:
+Intake completed successfully.
+
+Runtime:
+~8.9 minutes
+
+Observations:
+- Retry/backoff prevented TPM failure
+- 102 pages flagged for review
+- OCR applied to 24 pages
+
+## Validation Run — Spec Book
+
+Date: 2026-03-13
+
+Document Type: Specification Manual
+
+Pages: 1232
+
+Results:
+
+Spec Pages: 1124  
+Bid / Front-End Pages: 66  
+General Pages: 42  
+
+OCR Applied Pages: 24
+
+Runtime: ~51 minutes
+
+Notes:
+
+Retry/backoff handled multiple TPM limit events during processing.  
+Pipeline completed successfully.
+
+---
+
+## Validation Run — Drawing Set
+
+Date: 2026-03-13
+
+Document Type: Construction Drawings
+
+Sheets: 116
+
+Results:
+
+Drawings: 116  
+Low Confidence Pages: 1
+
+OCR Applied Pages: 24
+
+Runtime: ~11 minutes
+
+Notes:
+
+Sheet detection and naming accuracy were high.  
+Only one sheet flagged for review (schedule sheet).
+
+Test file:
+Lake Mitchell Contract #2 Specs
+
+Pages: 432
+
+Processing time: ~21 minutes
+
+Results:
+anchors: 242
+specSections: 119
+blankPages: 0
+reviewNeededPages: 6
+
+Assessment:
+Pipeline stable
+Spec interpretation quality insufficient
+Further refinement required

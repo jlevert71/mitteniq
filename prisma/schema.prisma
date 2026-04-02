@@ -21,6 +21,7 @@ enum ScaleStatus {
 
 enum IntakeStatus {
   PENDING
+  PROCESSING
   READY
   FAILED
 }
@@ -82,19 +83,35 @@ model Upload {
   isRasterOnly Boolean?
   intakeReport Json?
   intakeStatus IntakeStatus @default(PENDING)
+  intakeStage  String?
+  /// Plain-English hint while PROCESSING (why intake may take longer)
+  intakeDelayReason String?
   intakeError  String?
 
   sheets Sheet[]
+  preBidChecklist PreBidChecklist?
 }
 
 model Sheet {
-  id              String     @id @db.Text
-  uploadId         String
-  pageNumber       Int
-  sheetType        SheetType
-  scaleStatus      ScaleStatus
-  scaleConfidence  Int
-  notes            String?
+  id                  String      @id @db.Text
+  uploadId            String
+  pageNumber          Int
+
+  // Drawing identity
+  sheetNumber         String?
+  sheetName           String?
+  discipline          String?
+
+  // Mixed-content / spec identity
+  pageClass           String?     // DRAWING | SPEC | BID | GENERAL | UNKNOWN
+  sectionNumber       String?
+  sectionTitle        String?
+  isElectricalRelated Boolean?
+
+  sheetType           SheetType
+  scaleStatus         ScaleStatus
+  scaleConfidence     Int
+  notes               String?
 
   createdAt DateTime @db.Timestamptz(6)
   updatedAt DateTime @db.Timestamptz(6)
@@ -103,4 +120,81 @@ model Sheet {
 
   @@index([uploadId])
   @@unique([uploadId, pageNumber])
+}
+
+model PreBidChecklist {
+  id          String   @id @default(cuid())
+  uploadId    String   @unique
+  extractedAt DateTime
+  passesRun   Int
+  pagesScanned Int
+  model       String
+  durationMs  Int
+
+  // Section 1 — Bid Identity
+  projectName         String?
+  bidDueDate          String?
+  bidDueTime          String?
+  bidOpeningType      String?
+  biddingTo           String?
+  deliverBidTo        String?
+  deliveryMethod      String?
+  numberOfCopies      Int?
+  documentsAvailableAt String?
+  lastRfiDate         String?
+
+  // Section 2 — Pre-Bid Meeting
+  preBidHeld          Boolean?
+  preBidMandatory     Boolean?
+  preBidMandatoryScope String?
+  preBidDate          String?
+  preBidTime          String?
+  preBidLocation      String?
+
+  // Section 3 — Schedule
+  proposedStartDate      String?
+  proposedCompletionDate String?
+
+  // Section 4 — Bid Pricing Format
+  unitPricing        Boolean?
+  alternates         Boolean?
+  alternatesCount    Int?
+  alternatesDescription String?
+  allowances         Boolean?
+  breakDownsRequired Boolean?
+
+  // Section 5 — Bonds & Insurance
+  bidBondRequired        Boolean?
+  bidBondAmount          String?
+  plmBonds               Boolean?
+  liquidatedDamages      Boolean?
+  liquidatedDamagesAmount String?
+  obligee                String?
+  specialInsuranceRequired Boolean?
+  specialInsuranceType   String?
+
+  // Section 6 — Compliance & Labor
+  certifiedPayroll Boolean?
+  buyAmerican      Boolean?
+  dbeSbeRequired   Boolean?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  upload         Upload                       @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  allowanceItems PreBidChecklistAllowanceItem[]
+}
+
+model PreBidChecklistAllowanceItem {
+  id          String @id @default(cuid())
+  checklistId String
+  sortOrder   Int
+  description String
+  amount      String
+
+  createdAt DateTime @default(now())
+
+  checklist PreBidChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@index([checklistId])
 }

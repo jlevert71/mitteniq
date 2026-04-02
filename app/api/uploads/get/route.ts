@@ -24,6 +24,8 @@ export async function GET(req: Request) {
         filename: true,
         status: true,
         intakeStatus: true,
+        intakeStage: true,
+        intakeDelayReason: true,
         intakeError: true,
         intakeReport: true,
         pageCount: true,

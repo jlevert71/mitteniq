@@ -1,0 +1,2626 @@
+
+==================== lib\intake\types.ts ====================
+
+export type PageClass =
+  | "DRAWING"
+  | "SPEC"
+  | "BID"
+  | "GENERAL"
+  | "UNKNOWN"
+
+export type SheetSubtype =
+  | "PLAN"
+  | "DETAIL"
+  | "NO_SCALE_NEEDED"
+  | "UNKNOWN"
+
+export type ScaleStatus =
+  | "UNVERIFIED"
+  | "NO_SCALE_NEEDED"
+
+export type CandidateSource =
+  | "REGEX"
+  | "TITLEBLOCK_ZONE"
+  | "TEXT_PATTERN"
+  | "LAYOUT"
+  | "INDEX"
+  | "NEIGHBOR"
+  | "LLM"
+  | "EXISTING_LOGIC"
+  | "UNKNOWN"
+
+export type ProvenanceLayer =
+  | "LAYER1"
+  | "LAYER2"
+  | "LAYER3"
+
+export type ReviewFlag =
+  | "LOW_CONFIDENCE_SHEET_NUMBER"
+  | "LOW_CONFIDENCE_SHEET_NAME"
+  | "GENERIC_TITLE"
+  | "MULTIPLE_NUMBER_CANDIDATES"
+  | "INDEX_CONFLICT"
+  | "DUPLICATE_SHEET_NUMBER"
+  | "DISCIPLINE_CONFLICT"
+  | "PAGE_CLASS_AMBIGUOUS"
+  | "TITLEBLOCK_NOT_FOUND"
+  | "LOW_TEXT_DENSITY"
+  | "LIKELY_RASTER_LIMITATION"
+  | "SEQUENCE_GAP"
+  | "UNMATCHED_INDEX_ENTRY"
+
+export type CandidateValue<T = string> = {
+  value: T
+  score: number
+  source: CandidateSource
+  reason?: string
+}
+
+export type ZoneCandidate = {
+  label: string
+  score: number
+  xMin?: number
+  xMax?: number
+  yMin?: number
+  yMax?: number
+  reason?: string
+}
+
+export type InferredValue<T = string> = {
+  value: T | null
+  confidence: number
+  source: CandidateSource
+  reason?: string
+}
+
+export type PositionalTextToken = {
+  text: string
+  x: number
+  y: number
+  width?: number
+  height?: number
+}
+
+export type IndexReference = {
+  sheetNumber: string | null
+  sheetName: string | null
+  confidence: number
+  sourcePageNumber?: number
+}
+
+export type PageEvidence = {
+  pageNumber: number
+  pdfFacts: {
+    width: number | null
+    height: number | null
+    printSize: string | null
+    rotation: number | null
+    isRasterLikely: boolean
+    isSearchable: boolean
+    textDensity: number
+  }
+  rawText: {
+    fullText: string
+    normalizedText: string
+    lines: string[]
+    tokens: PositionalTextToken[]
+  }
+  candidateSignals: {
+    sheetNumbers: CandidateValue<string>[]
+    sheetTitles: CandidateValue<string>[]
+    pageClasses: CandidateValue<PageClass>[]
+    sheetSubtypes: CandidateValue<SheetSubtype>[]
+    disciplines: CandidateValue<string>[]
+    specSections: CandidateValue<string>[]
+    titleBlockZones: ZoneCandidate[]
+    indexReferences: IndexReference[]
+  }
+  baselineDetections: {
+    pageClass: InferredValue<PageClass>
+    sheetNumber: InferredValue<string>
+    sheetName: InferredValue<string>
+    sheetSubtype: InferredValue<SheetSubtype>
+    discipline: InferredValue<string>
+    scaleStatus: InferredValue<ScaleStatus>
+    scaleConfidence: number
+    electricalRelevance?: InferredValue<string>
+  }
+  extractionWarnings: string[]
+}
+
+export type NumberingSchema = {
+  label: string
+  confidence: number
+  examples: string[]
+}
+
+export type DisciplineGroup = {
+  label: string
+  pageNumbers: number[]
+  confidence: number
+}
+
+export type RegionPattern = {
+  label: string
+  confidence: number
+}
+
+export type NamingPattern = {
+  label: string
+  confidence: number
+}
+
+export type DuplicateCandidate = {
+  sheetNumber: string
+  pageNumbers: number[]
+}
+
+export type ConflictSet = {
+  pageNumber: number
+  conflicts: string[]
+}
+
+export type FieldConfidence = {
+  overall: number
+  sheetNumber: number
+  sheetName: number
+  pageClass: number
+  sheetSubtype: number
+  discipline: number
+}
+
+export type FieldProvenance = {
+  sheetNumber: ProvenanceLayer
+  sheetName: ProvenanceLayer
+  pageClass: ProvenanceLayer
+  sheetSubtype: ProvenanceLayer
+  discipline: ProvenanceLayer
+}
+
+export type SheetInference = {
+  pageNumber: number
+  final: {
+    sheetNumber: string | null
+    sheetName: string | null
+    pageClass: PageClass
+    sheetSubtype: SheetSubtype
+    discipline: string | null
+    scaleStatus: ScaleStatus
+    scaleConfidence: number
+    printSize: string | null
+  }
+  confidence: FieldConfidence
+  provenance: FieldProvenance
+  reviewFlags: ReviewFlag[]
+}
+
+export type DocumentContext = {
+  uploadId: string
+  pageCount: number
+  pages: PageEvidence[]
+  documentPatterns: {
+    numberingSchemas: NumberingSchema[]
+    disciplineGroups: DisciplineGroup[]
+    likelyIndexPages: number[]
+    titleBlockRegions: RegionPattern[]
+    namingConventions: NamingPattern[]
+    printSizeDistribution: Record<string, number>
+  }
+  inferredStructure: {
+    orderedSheets: SheetInference[]
+    orphanPages: number[]
+    duplicateCandidates: DuplicateCandidate[]
+    conflictSets: ConflictSet[]
+  }
+}
+
+export type Layer3Refinement = {
+  pageNumber: number
+  sheetName?: string | null
+  pageClass?: PageClass
+  sheetSubtype?: SheetSubtype
+  electricalRelevance?: string | null
+  specSectionNumbers?: string[]
+  confidence?: number
+  reason?: string
+}
+
+==================== lib\llm-intake.ts ====================
+
+console.log("OpenAI key loaded:", !!process.env.OPENAI_API_KEY)
+
+import OpenAI from "openai"
+
+type PdfTextItem = {
+  str: string
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type LlmPdfPageText = {
+  pageNumber: number
+  width: number
+  height: number
+  items: PdfTextItem[]
+  fullText: string
+}
+
+export type LlmPageClass = "DRAWING" | "SPEC" | "BID" | "GENERAL" | "UNKNOWN"
+
+export type LlmDetectedSheet = {
+  pageNumber: number
+  pageClass: LlmPageClass
+  sheetNumber: string | null
+  sheetName: string | null
+  discipline: string | null
+  sectionNumber: string | null
+  sectionTitle: string | null
+  isElectricalRelated: boolean | null
+  sheetType: "PLAN" | "DETAIL" | "NO_SCALE_NEEDED" | "UNKNOWN"
+  scaleStatus: "UNVERIFIED" | "NO_SCALE_NEEDED"
+  scaleConfidence: number
+  notes: string | null
+}
+
+type LlmRefinementItem = {
+  pageNumber: number
+  pageClass: LlmPageClass | null
+  sheetNumber: string | null
+  sheetName: string | null
+  sectionNumber: string | null
+  sectionTitle: string | null
+  isElectricalRelated: boolean | null
+  sheetType: "PLAN" | "DETAIL" | "NO_SCALE_NEEDED" | "UNKNOWN" | null
+  rationale: string | null
+}
+
+type LlmRefinementPayload = {
+  reportExplanation: string | null
+  pages: LlmRefinementItem[]
+}
+
+export type LlmAssistResult = {
+  enabled: boolean
+  used: boolean
+  model: string | null
+  candidatePages: number
+  refinedPages: number
+  skippedReason: string | null
+  reportExplanation: string | null
+  debugEnvFlagRaw: string | null
+  debugHasApiKey: boolean
+}
+
+type RefineParams = {
+  uploadId: string
+  filename: string | null
+  pages: LlmPdfPageText[]
+  detectedPages: LlmDetectedSheet[]
+}
+
+type RefineResult = {
+  sheets: LlmDetectedSheet[]
+  llm: LlmAssistResult
+}
+
+const LLM_MODEL = "gpt-4o-mini"
+
+let cachedClient: OpenAI | null | undefined = undefined
+
+function getApiKeyRaw() {
+  const raw = process.env.OPENAI_API_KEY
+  return typeof raw === "string" ? raw.trim() : ""
+}
+
+function getEnvFlagRaw() {
+  const raw = process.env.MITTENIQ_LLM_INTAKE_ENABLED
+  return typeof raw === "string" ? raw : null
+}
+
+function getClient() {
+  if (cachedClient !== undefined) return cachedClient
+  const apiKey = getApiKeyRaw()
+  if (!apiKey) {
+    cachedClient = null
+    return cachedClient
+  }
+  cachedClient = new OpenAI({ apiKey })
+  return cachedClient
+}
+
+function llmEnabled() {
+  const raw = getEnvFlagRaw()
+  return String(raw ?? "").trim().toLowerCase() === "true"
+}
+
+function joinTextItems(items: PdfTextItem[]) {
+  return items
+    .map((item) => item.str)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function getRegionText(
+  page: LlmPdfPageText,
+  region: "bottomRight" | "bottomBand" | "topBand" | "whole" | "tailText"
+) {
+  if (!page.items.length) {
+    const full = page.fullText ?? ""
+    if (region === "tailText") return full.slice(Math.floor(full.length * 0.7)).trim() || full
+    if (region === "bottomRight") return full.slice(Math.floor(full.length * 0.8)).trim() || full
+    if (region === "bottomBand") return full.slice(Math.floor(full.length * 0.65)).trim() || full
+    if (region === "topBand") return full.slice(0, Math.max(0, Math.floor(full.length * 0.35))).trim() || full
+    return full
+  }
+
+  let filtered = page.items
+
+  if (region === "bottomRight") {
+    const minX = page.width * 0.6
+    const maxY = page.height * 0.24
+    filtered = page.items.filter((item) => item.x >= minX && item.y <= maxY)
+  } else if (region === "bottomBand") {
+    const maxY = page.height * 0.24
+    filtered = page.items.filter((item) => item.y <= maxY)
+  } else if (region === "topBand") {
+    const minY = page.height * 0.76
+    filtered = page.items.filter((item) => item.y >= minY)
+  } else if (region === "tailText") {
+    const whole = joinTextItems(page.items)
+    return whole.slice(Math.floor(whole.length * 0.7)).trim() || page.fullText
+  }
+
+  return joinTextItems(filtered)
+}
+
+function compactText(text: string, maxLen: number) {
+  const normalized = text.replace(/\s+/g, " ").trim()
+  if (normalized.length <= maxLen) return normalized
+  return normalized.slice(0, maxLen).trim()
+}
+
+function normalizeNullableString(value: unknown, maxLen = 160): string | null {
+  if (typeof value !== "string") return null
+  const cleaned = value.replace(/\s+/g, " ").trim()
+  if (!cleaned) return null
+  return cleaned.slice(0, maxLen)
+}
+
+function normalizeSheetNumber(value: unknown): string | null {
+  const raw = normalizeNullableString(value, 24)
+  if (!raw) return null
+
+  const normalized = raw.replace(/[–—]/g, "-").replace(/\s+/g, "").toUpperCase()
+
+  if (
+    /^[A-Z]{1,4}-\d{1,4}(?:\.\d{1,3})?$/.test(normalized) ||
+    /^[A-Z]{1,4}\d{1,4}(?:\.\d{1,3})?$/.test(normalized)
+  ) {
+    return normalized
+  }
+
+  return null
+}
+
+function normalizePageClass(value: unknown): LlmPageClass | null {
+  if (typeof value !== "string") return null
+  const upper = value.trim().toUpperCase()
+  if (
+    upper === "DRAWING" ||
+    upper === "SPEC" ||
+    upper === "BID" ||
+    upper === "GENERAL" ||
+    upper === "UNKNOWN"
+  ) {
+    return upper
+  }
+  return null
+}
+
+function normalizeSheetType(value: unknown): "PLAN" | "DETAIL" | "NO_SCALE_NEEDED" | "UNKNOWN" | null {
+  if (typeof value !== "string") return null
+  const upper = value.trim().toUpperCase()
+  if (
+    upper === "PLAN" ||
+    upper === "DETAIL" ||
+    upper === "NO_SCALE_NEEDED" ||
+    upper === "UNKNOWN"
+  ) {
+    return upper
+  }
+  return null
+}
+
+function normalizeBooleanOrNull(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value
+  return null
+}
+
+function looksGenericSheetName(name: string | null) {
+  if (!name) return true
+  const lower = name.trim().toLowerCase()
+
+  const generic = new Set([
+    "plan",
+    "detail",
+    "details",
+    "diagram",
+    "notes",
+    "site",
+    "general notes",
+    "key notes",
+    "legend",
+    "schedule",
+    "sheet",
+    "drawing",
+    "page",
+  ])
+
+  return generic.has(lower)
+}
+
+function looksLikeGarbageTitle(name: string | null) {
+  if (!name) return false
+  const clean = name.trim()
+
+  if (clean.length < 4) return true
+  if (/^[A-Z0-9-]{5,}$/.test(clean)) return true
+  if (/^[A-Z]{2,}\d{3,}$/.test(clean)) return true
+  if (/^\d+$/.test(clean)) return true
+
+  const words = clean.split(/\s+/)
+  if (words.length === 1 && /^[A-Z0-9-]+$/i.test(words[0])) return true
+
+  return false
+}
+
+function chooseCandidatePages(
+  pages: LlmPdfPageText[],
+  detectedPages: LlmDetectedSheet[]
+) {
+  const pageByNumber = new Map<number, LlmPdfPageText>()
+  for (const page of pages) {
+    pageByNumber.set(page.pageNumber, page)
+  }
+
+  const ranked = detectedPages
+    .map((sheet) => {
+      const page = pageByNumber.get(sheet.pageNumber)
+      if (!page) return null
+
+      let score = 0
+
+      if (sheet.pageClass === "UNKNOWN") score += 100
+      if (sheet.pageClass === "GENERAL") score += 60
+
+      if (sheet.pageClass === "DRAWING") {
+        if (!sheet.sheetNumber) score += 50
+        if (!sheet.sheetName) score += 60
+        if (looksGenericSheetName(sheet.sheetName)) score += 55
+        if (looksLikeGarbageTitle(sheet.sheetName)) score += 75
+        if (sheet.sheetType === "UNKNOWN") score += 40
+        if (sheet.scaleConfidence < 85) score += 15
+      }
+
+      if (sheet.pageClass === "SPEC" || sheet.pageClass === "BID") {
+        if (!sheet.sectionNumber) score += 50
+        if (!sheet.sectionTitle) score += 55
+      }
+
+      if (sheet.isElectricalRelated == null) score += 10
+
+      const textLen = page.fullText.trim().length
+      if (textLen < 50) score -= 45
+      if (textLen > 100) score += 10
+      if (textLen > 300) score += 8
+
+      return {
+        sheet,
+        page,
+        score,
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b!.score - a!.score)) as Array<{
+      sheet: LlmDetectedSheet
+      page: LlmPdfPageText
+      score: number
+    }>
+
+  return ranked.filter((r) => r.score > 0).slice(0, 40)
+}
+
+function inferSheetIndexMap(pages: LlmPdfPageText[]) {
+  const firstPage = pages[0]
+  if (!firstPage?.fullText) return {} as Record<string, string>
+
+  const compact = firstPage.fullText.replace(/\s+/g, " ").trim()
+  const map: Record<string, string> = {}
+
+  const pattern =
+    /\b([A-Z]{1,4}(?:-\d{1,4}|\d{2,4})(?:\.\d{1,3})?)\s+([A-Z][A-Z0-9,&/()' -]{3,120}?)(?=\s+[A-Z]{1,4}(?:-\d{1,4}|\d{2,4})(?:\.\d{1,3})?\s+|$)/g
+
+  for (const match of compact.matchAll(pattern)) {
+    const code = String(match[1] ?? "")
+      .replace(/[–—]/g, "-")
+      .replace(/\s+/g, "")
+      .trim()
+      .toUpperCase()
+
+    const title = String(match[2] ?? "").replace(/\s+/g, " ").trim()
+    if (!code || !title) continue
+    map[code] = title
+  }
+
+  return map
+}
+
+function buildPromptPayload(
+  uploadId: string,
+  filename: string | null,
+  pages: LlmPdfPageText[],
+  candidates: Array<{
+    sheet: LlmDetectedSheet
+    page: LlmPdfPageText
+    score: number
+  }>
+) {
+  const sheetIndexMap = inferSheetIndexMap(pages)
+
+  return {
+    uploadId,
+    filename,
+    instructions: {
+      role:
+        "Classify construction PDF pages for an electrical estimating platform. Be conservative. Do not invent data. Prefer null over guessing.",
+      policy: [
+        "You are the primary understanding layer for uncertain pages.",
+        "Return only schema-valid JSON.",
+        "If evidence is weak, return null instead of forcing a value.",
+        "Spec pages should not be given drawing sheet names.",
+        "Drawing pages should not be given specification section titles.",
+        "Reject OCR junk, tag codes, callout fragments, and random alphanumeric strings as titles.",
+        "Use page text, title-block-like text, and index-sheet references together.",
+      ],
+      pageClassOptions: ["DRAWING", "SPEC", "BID", "GENERAL", "UNKNOWN"],
+      sheetTypeOptions: ["PLAN", "DETAIL", "NO_SCALE_NEEDED", "UNKNOWN"],
+      sheetNumberRules: [
+        "Only return a sheetNumber if it looks like a real sheet code such as E-101, E1.0, A201, P-001, I-100.",
+        "Do not return project numbers, callout tags, symbol IDs, or OCR junk.",
+        "If unsure, return null.",
+      ],
+      drawingTitleRules: [
+        "Use a drawing sheet title only if supported by page evidence or index support.",
+        "Do not output generic titles like Plan, Detail, Diagram, Notes, Site unless that is truly the full title.",
+        "Do not output OCR garbage like CARP0706 or ELEC0275 as titles.",
+        "If the cover-sheet index clearly provides a better title for the same sheetNumber, prefer it.",
+      ],
+      specRules: [
+        "SPEC pages often contain SECTION 26 05 19 or similar CSI formatting.",
+        "BID pages contain bidder instructions, bid forms, invitations, procurement language, contracts, general conditions, supplementary conditions.",
+        "For specs and bids, populate sectionNumber and sectionTitle when possible.",
+      ],
+      subtypeRules: [
+        "PLAN is for site/floor/power/lighting/electrical plan views.",
+        "DETAIL is for diagrams, risers, legends, notes, schedules, details, elevations, one-lines, sections.",
+        "NO_SCALE_NEEDED is for cover/index or document pages where scale is not relevant.",
+        "UNKNOWN is better than guessing.",
+      ],
+      electricalRules: [
+        "Set isElectricalRelated true when the page is clearly electrical-related.",
+        "Set false when clearly not electrical-related.",
+        "Set null when not clear.",
+      ],
+    },
+    coverSheetIndex: sheetIndexMap,
+    pages: candidates.map(({ sheet, page, score }) => ({
+      pageNumber: page.pageNumber,
+      routingScore: score,
+      currentDetection: {
+        pageClass: sheet.pageClass,
+        sheetNumber: sheet.sheetNumber,
+        sheetName: sheet.sheetName,
+        sectionNumber: sheet.sectionNumber,
+        sectionTitle: sheet.sectionTitle,
+        isElectricalRelated: sheet.isElectricalRelated,
+        discipline: sheet.discipline,
+        sheetType: sheet.sheetType,
+        scaleStatus: sheet.scaleStatus,
+        scaleConfidence: sheet.scaleConfidence,
+        notes: sheet.notes,
+      },
+      coverSheetIndexTitle:
+        sheet.sheetNumber && sheetIndexMap[sheet.sheetNumber]
+          ? sheetIndexMap[sheet.sheetNumber]
+          : null,
+      evidence: {
+        bottomRightText: compactText(getRegionText(page, "bottomRight"), 300),
+        bottomBandText: compactText(getRegionText(page, "bottomBand"), 450),
+        topBandText: compactText(getRegionText(page, "topBand"), 300),
+        tailText: compactText(getRegionText(page, "tailText"), 450),
+        fullTextExcerpt: compactText(page.fullText, 1200),
+      },
+    })),
+  }
+}
+
+const refinementSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    reportExplanation: {
+      type: ["string", "null"],
+    },
+    pages: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          pageNumber: { type: "integer" },
+          pageClass: {
+            type: ["string", "null"],
+            enum: ["DRAWING", "SPEC", "BID", "GENERAL", "UNKNOWN", null],
+          },
+          sheetNumber: { type: ["string", "null"] },
+          sheetName: { type: ["string", "null"] },
+          sectionNumber: { type: ["string", "null"] },
+          sectionTitle: { type: ["string", "null"] },
+          isElectricalRelated: { type: ["boolean", "null"] },
+          sheetType: {
+            type: ["string", "null"],
+            enum: ["PLAN", "DETAIL", "NO_SCALE_NEEDED", "UNKNOWN", null],
+          },
+          rationale: { type: ["string", "null"] },
+        },
+        required: [
+          "pageNumber",
+          "pageClass",
+          "sheetNumber",
+          "sheetName",
+          "sectionNumber",
+          "sectionTitle",
+          "isElectricalRelated",
+          "sheetType",
+          "rationale",
+        ],
+      },
+    },
+  },
+  required: ["reportExplanation", "pages"],
+} as const
+
+function parsePayload(raw: string): LlmRefinementPayload | null {
+  try {
+    const json = JSON.parse(raw) as Partial<LlmRefinementPayload>
+    if (!json || !Array.isArray(json.pages)) return null
+
+    const pages: LlmRefinementItem[] = json.pages.map((item: any) => ({
+      pageNumber: Number(item?.pageNumber ?? 0),
+      pageClass: normalizePageClass(item?.pageClass),
+      sheetNumber: normalizeSheetNumber(item?.sheetNumber),
+      sheetName: normalizeNullableString(item?.sheetName, 160),
+      sectionNumber: normalizeNullableString(item?.sectionNumber, 40),
+      sectionTitle: normalizeNullableString(item?.sectionTitle, 180),
+      isElectricalRelated: normalizeBooleanOrNull(item?.isElectricalRelated),
+      sheetType: normalizeSheetType(item?.sheetType),
+      rationale: normalizeNullableString(item?.rationale, 240),
+    }))
+
+    return {
+      reportExplanation: normalizeNullableString(json.reportExplanation, 240),
+      pages: pages.filter((p) => Number.isFinite(p.pageNumber) && p.pageNumber > 0),
+    }
+  } catch {
+    return null
+  }
+}
+
+function combineNotes(existing: string | null, addition: string | null) {
+  const parts = [existing?.trim(), addition?.trim()].filter(Boolean) as string[]
+  if (parts.length === 0) return null
+  return Array.from(new Set(parts)).join(" ")
+}
+
+function shouldReplacePageClass(existing: LlmDetectedSheet, nextValue: LlmPageClass | null) {
+  if (!nextValue) return false
+  if (existing.pageClass === nextValue) return false
+  if (existing.pageClass === "UNKNOWN") return true
+  if (existing.pageClass === "GENERAL" && (nextValue === "DRAWING" || nextValue === "SPEC" || nextValue === "BID")) {
+    return true
+  }
+  if (existing.pageClass === "DRAWING" && (nextValue === "SPEC" || nextValue === "BID")) return true
+  if ((existing.pageClass === "SPEC" || existing.pageClass === "BID") && nextValue === "DRAWING") return true
+  if (existing.scaleConfidence < 60) return true
+  return false
+}
+
+function shouldReplaceSheetName(existing: LlmDetectedSheet, nextName: string | null) {
+  if (!nextName) return false
+  if (looksLikeGarbageTitle(nextName)) return false
+  if (!existing.sheetName) return true
+  if (looksLikeGarbageTitle(existing.sheetName)) return true
+  if (looksGenericSheetName(existing.sheetName) && !looksGenericSheetName(nextName)) return true
+  if (existing.sheetName.trim().toLowerCase() !== nextName.trim().toLowerCase() && existing.scaleConfidence < 80) {
+    return true
+  }
+  return false
+}
+
+function shouldReplaceSectionTitle(existing: LlmDetectedSheet, nextTitle: string | null) {
+  if (!nextTitle) return false
+  if (!existing.sectionTitle) return true
+  return false
+}
+
+function shouldReplaceSheetType(
+  existing: LlmDetectedSheet,
+  nextType: "PLAN" | "DETAIL" | "NO_SCALE_NEEDED" | "UNKNOWN" | null
+) {
+  if (!nextType) return false
+  if (existing.sheetType === nextType) return false
+  if (existing.sheetType === "UNKNOWN") return true
+  if (existing.scaleConfidence < 80) return true
+  return false
+}
+
+function mergeRefinements(
+  detectedPages: LlmDetectedSheet[],
+  refinements: LlmRefinementPayload
+): { sheets: LlmDetectedSheet[]; refinedPages: number } {
+  const refinementByPage = new Map<number, LlmRefinementItem>()
+  for (const item of refinements.pages) {
+    refinementByPage.set(item.pageNumber, item)
+  }
+
+  let refinedPages = 0
+
+  const sheets = detectedPages.map((sheet) => {
+    const next = refinementByPage.get(sheet.pageNumber)
+    if (!next) return sheet
+
+    let changed = false
+    const merged: LlmDetectedSheet = { ...sheet }
+
+    if (shouldReplacePageClass(sheet, next.pageClass)) {
+      merged.pageClass = next.pageClass as LlmPageClass
+      changed = true
+    }
+
+    if (!merged.sheetNumber && next.sheetNumber) {
+      merged.sheetNumber = next.sheetNumber
+      changed = true
+    }
+
+    if (merged.pageClass === "DRAWING" && shouldReplaceSheetName(sheet, next.sheetName)) {
+      merged.sheetName = next.sheetName
+      changed = true
+    }
+
+    if ((merged.pageClass === "SPEC" || merged.pageClass === "BID") && !merged.sectionNumber && next.sectionNumber) {
+      merged.sectionNumber = next.sectionNumber
+      changed = true
+    }
+
+    if ((merged.pageClass === "SPEC" || merged.pageClass === "BID") && shouldReplaceSectionTitle(sheet, next.sectionTitle)) {
+      merged.sectionTitle = next.sectionTitle
+      changed = true
+    }
+
+    if (merged.isElectricalRelated == null && next.isElectricalRelated != null) {
+      merged.isElectricalRelated = next.isElectricalRelated
+      changed = true
+    }
+
+    if (merged.pageClass === "DRAWING" && shouldReplaceSheetType(sheet, next.sheetType)) {
+      merged.sheetType = next.sheetType as LlmDetectedSheet["sheetType"]
+
+      if (next.sheetType === "PLAN") {
+        merged.scaleStatus = "UNVERIFIED"
+      } else {
+        merged.scaleStatus = "NO_SCALE_NEEDED"
+      }
+
+      changed = true
+    }
+
+    if (changed) {
+      refinedPages += 1
+      merged.notes = combineNotes(
+        merged.notes,
+        next.rationale ? `LLM review: ${next.rationale}` : "LLM review refined one or more uncertain fields."
+      )
+    }
+
+    return merged
+  })
+
+  return { sheets, refinedPages }
+}
+
+export async function refineDetectedSheetsWithLlm({
+  uploadId,
+  filename,
+  pages,
+  detectedPages,
+}: RefineParams): Promise<RefineResult> {
+  const enabled = llmEnabled()
+  const debugEnvFlagRaw = getEnvFlagRaw()
+  const debugHasApiKey = Boolean(getApiKeyRaw())
+
+  const baseLlm: LlmAssistResult = {
+    enabled,
+    used: false,
+    model: null,
+    candidatePages: 0,
+    refinedPages: 0,
+    skippedReason: null,
+    reportExplanation: null,
+    debugEnvFlagRaw,
+    debugHasApiKey,
+  }
+
+  if (!enabled) {
+    return {
+      sheets: detectedPages,
+      llm: {
+        ...baseLlm,
+        skippedReason: `MITTENIQ_LLM_INTAKE_ENABLED is not true. Raw value: ${debugEnvFlagRaw ?? "null"}`,
+      },
+    }
+  }
+
+  const client = getClient()
+  if (!client) {
+    return {
+      sheets: detectedPages,
+      llm: {
+        ...baseLlm,
+        skippedReason: "OPENAI_API_KEY is missing.",
+      },
+    }
+  }
+
+  if (!pages.length || !detectedPages.length) {
+    return {
+      sheets: detectedPages,
+      llm: {
+        ...baseLlm,
+        skippedReason: "No extracted page text available for LLM refinement.",
+      },
+    }
+  }
+
+  const candidates = chooseCandidatePages(pages, detectedPages)
+
+  if (!candidates.length) {
+    return {
+      sheets: detectedPages,
+      llm: {
+        ...baseLlm,
+        skippedReason: "No pages met the refinement threshold.",
+      },
+    }
+  }
+
+  const promptPayload = buildPromptPayload(uploadId, filename, pages, candidates)
+
+  try {
+    const response = await client.chat.completions.create({
+      model: LLM_MODEL,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You classify construction PDF pages for MittenIQ. Be conservative. Never invent. Return only valid JSON. Prefer null over a wrong answer. Reject OCR junk as titles. Do not force drawings into specs or specs into drawings.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify(promptPayload),
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "mitteniq_intake_refinement",
+          strict: true,
+          schema: refinementSchema,
+        },
+      },
+    } as any)
+
+    const outputText = String(response?.choices?.[0]?.message?.content ?? "").trim()
+    if (!outputText) {
+      return {
+        sheets: detectedPages,
+        llm: {
+          ...baseLlm,
+          model: LLM_MODEL,
+          candidatePages: candidates.length,
+          skippedReason: "LLM returned no output text.",
+        },
+      }
+    }
+
+    const parsed = parsePayload(outputText)
+    if (!parsed) {
+      return {
+        sheets: detectedPages,
+        llm: {
+          ...baseLlm,
+          model: LLM_MODEL,
+          candidatePages: candidates.length,
+          skippedReason: "LLM output could not be parsed into the expected schema.",
+        },
+      }
+    }
+
+    const merged = mergeRefinements(detectedPages, parsed)
+
+    return {
+      sheets: merged.sheets,
+      llm: {
+        ...baseLlm,
+        used: true,
+        model: LLM_MODEL,
+        candidatePages: candidates.length,
+        refinedPages: merged.refinedPages,
+        skippedReason: null,
+        reportExplanation: parsed.reportExplanation,
+      },
+    }
+  } catch (error: any) {
+    return {
+      sheets: detectedPages,
+      llm: {
+        ...baseLlm,
+        model: LLM_MODEL,
+        candidatePages: candidates.length,
+        skippedReason: error?.message ? String(error.message) : "LLM request failed.",
+      },
+    }
+  }
+}
+
+==================== lib\intake\layer1-page-evidence.ts ====================
+
+import {
+  CandidateValue,
+  CandidateSource,
+  InferredValue,
+  PageClass,
+  PageEvidence,
+  PositionalTextToken,
+  ScaleStatus,
+  SheetSubtype,
+  ZoneCandidate,
+} from "./types"
+
+type ExistingPageDetectionInput = {
+  pageNumber: number
+  width?: number | null
+  height?: number | null
+  printSize?: string | null
+  rotation?: number | null
+  isRasterLikely?: boolean
+  isSearchable?: boolean
+  fullText?: string | null
+  lines?: string[]
+  tokens?: PositionalTextToken[]
+  warnings?: string[]
+
+  detectedSheetNumber?: string | null
+  detectedSheetName?: string | null
+  detectedPageClass?: PageClass | null
+  detectedSheetSubtype?: SheetSubtype | null
+  detectedDiscipline?: string | null
+  detectedScaleStatus?: ScaleStatus | null
+  detectedScaleConfidence?: number | null
+}
+
+type RegionName =
+  | "bottomRight"
+  | "bottomBand"
+  | "bottomCenter"
+  | "topBand"
+  | "whole"
+  | "tailText"
+
+type RegionText = {
+  region: RegionName
+  text: string
+}
+
+const HIGH_CONFIDENCE_SHEET_NUMBER = 0.9
+const HIGH_CONFIDENCE_SHEET_TITLE = 0.88
+const HIGH_CONFIDENCE_PAGE_CLASS = 0.9
+const HIGH_CONFIDENCE_SHEET_SUBTYPE = 0.88
+const HIGH_CONFIDENCE_DISCIPLINE = 0.88
+
+function normalizeText(input: string): string {
+  return input.replace(/\r/g, "\n").replace(/[ \t]+/g, " ").trim()
+}
+
+function normalizeLines(lines: string[]): string[] {
+  return lines.map((line) => normalizeText(line)).filter(Boolean)
+}
+
+function cleanTitle(value: string): string {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/[|]+/g, " ")
+    .replace(/\bSCALE:\s*NOT TO SCALE\b/gi, "")
+    .replace(/\s*[-–—]+\s*\d+\s+OF\s+\d+\s*[-–—]*$/i, "")
+    .trim()
+}
+
+function normalizeSheetCode(raw: string) {
+  return raw
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, "")
+    .trim()
+    .toUpperCase()
+}
+
+function isValidSheetCodeCandidate(code: string) {
+  if (!code) return false
+  if (code.length < 2 || code.length > 16) return false
+
+  const banned = new Set(["PDF", "RFI", "CSI", "BT", "ET", "DIV", "PAGE"])
+  if (banned.has(code)) return false
+
+  return (
+    /^[A-Z]{1,4}-\d{1,4}(?:\.\d{1,3})?$/.test(code) ||
+    /^[A-Z]{1,4}\d{1,4}(?:\.\d{1,3})?$/.test(code)
+  )
+}
+
+function countOccurrences(text: string, code: string) {
+  const escaped = code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const matches = text.match(new RegExp(`\\b${escaped}\\b`, "g"))
+  return matches ? matches.length : 0
+}
+
+function looksLikeProjectNumber(code: string, pageText: string) {
+  if (/^\d{4,}$/.test(code)) return true
+  if (/^\d{4,5}-\d{2}$/.test(code)) return true
+
+  const projectNumberMatch = pageText.match(/project\s+(?:number|no\.?)\s*[:#]?\s*([A-Z0-9-]+)/i)
+  if (projectNumberMatch && normalizeSheetCode(projectNumberMatch[1]) === code) return true
+
+  const dwsrfMatch = pageText.match(/dwsrf\s+project\s*[:#]?\s*([A-Z0-9-]+)/i)
+  if (dwsrfMatch && normalizeSheetCode(dwsrfMatch[1]) === code) return true
+
+  return false
+}
+
+function looksLikeLegendTagCode(code: string) {
+  return /^[A-Z]-\d{1,2}$/.test(code)
+}
+
+function extractCodeCandidatesFromText(text: string) {
+  const patterns = [
+    /\b([A-Z]{1,4}\s*[-–—]\s*\d{1,4}(?:\.\d{1,3})?)\b/g,
+    /\b([A-Z]{1,4}\d{1,4}(?:\.\d{1,3})?)\b/g,
+  ]
+
+  const out: string[] = []
+  const seen = new Set<string>()
+
+  for (const pattern of patterns) {
+    const matches = [...text.matchAll(pattern)]
+    for (const match of matches) {
+      const code = normalizeSheetCode(String(match[1] ?? ""))
+      if (!isValidSheetCodeCandidate(code)) continue
+      if (seen.has(code)) continue
+      seen.add(code)
+      out.push(code)
+    }
+  }
+
+  return out
+}
+
+function candidateWeight(code: string) {
+  let score = 0
+
+  if (/^[A-Z]{1,4}-\d{1,4}\.\d{1,3}$/.test(code)) score += 1.1
+  else if (/^[A-Z]{1,4}-\d{1,4}$/.test(code)) score += 1.0
+  else if (/^[A-Z]{1,4}\d{1,4}\.\d{1,3}$/.test(code)) score += 0.9
+  else if (/^[A-Z]{1,4}\d{1,4}$/.test(code)) score += 0.8
+
+  if (/^(G|E|M|P|A|C|S|F|T|L|I)/.test(code)) score += 0.1
+
+  return score
+}
+
+function scoreSheetCodeCandidate(
+  fullText: string,
+  code: string,
+  region: RegionName,
+  regionText: string,
+): number {
+  let score = candidateWeight(code)
+
+  if (region === "bottomRight") score += 0.5
+  else if (region === "bottomBand") score += 0.3
+  else if (region === "tailText") score += 0.35
+  else if (region === "topBand") score += 0.08
+
+  const occurrenceCountInPage = countOccurrences(fullText, code)
+  if (occurrenceCountInPage <= 2) score += 0.15
+  else if (occurrenceCountInPage >= 5) score -= 0.2
+
+  if (looksLikeProjectNumber(code, fullText)) score -= 0.5
+  if (looksLikeLegendTagCode(code)) score -= 0.45
+
+  const lowerFull = fullText.toLowerCase()
+  if (/^A\d{2,4}$/.test(code)) {
+    const detailNoiseNearby =
+      lowerFull.includes("detail") ||
+      lowerFull.includes("section") ||
+      lowerFull.includes("elevation") ||
+      lowerFull.includes("tag") ||
+      lowerFull.includes("frame")
+
+    if (detailNoiseNearby) score -= 0.35
+  }
+
+  const escaped = code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const contextPattern = new RegExp(`.{0,24}\\b${escaped}\\b.{0,24}`, "i")
+  const localContext = fullText.match(contextPattern)?.[0]?.toLowerCase() ?? regionText.toLowerCase()
+
+  if (
+    localContext.includes("section") ||
+    localContext.includes("detail") ||
+    localContext.includes("elevation") ||
+    localContext.includes("tag") ||
+    localContext.includes("frame")
+  ) {
+    score -= 0.25
+  }
+
+  if (
+    localContext.includes("project number") ||
+    localContext.includes("dwsrf") ||
+    localContext.includes("issued for bids") ||
+    localContext.includes("date:")
+  ) {
+    score -= 0.2
+  }
+
+  return Math.max(0.01, Math.min(0.99, score / 2))
+}
+
+function looksLikeBadTitle(s: string) {
+  const lower = s.toLowerCase()
+  if (!s.trim()) return true
+  if (s.trim().length < 4) return true
+  if (/^\d+$/.test(s.trim())) return true
+  if (lower.includes("%pdf")) return true
+  if (lower === "page") return true
+  if (lower === "sheet") return true
+  return false
+}
+
+function looksLikeBadIndexedTitle(title: string) {
+  const lower = title.toLowerCase()
+  if (!title) return true
+  if (title.length < 3) return true
+
+  const bannedExact = new Set([
+    "notes",
+    "key notes",
+    "general notes",
+    "symbols",
+    "graphic symbols",
+    "sheet no.",
+    "project no.",
+    "bids and construction",
+  ])
+
+  if (bannedExact.has(lower)) return true
+  return false
+}
+
+function hasTitleSignal(work: string) {
+  const lower = work.toLowerCase()
+  return (
+    lower.includes("plan") ||
+    lower.includes("schedule") ||
+    lower.includes("detail") ||
+    lower.includes("diagram") ||
+    lower.includes("elevation") ||
+    lower.includes("section") ||
+    lower.includes("legend") ||
+    lower.includes("notes") ||
+    lower.includes("riser") ||
+    lower.includes("one-line") ||
+    lower.includes("one line") ||
+    lower.includes("single line") ||
+    lower.includes("site") ||
+    lower.includes("floor") ||
+    lower.includes("power") ||
+    lower.includes("lighting") ||
+    lower.includes("grounding") ||
+    lower.includes("photo") ||
+    lower.includes("cover sheet") ||
+    lower.includes("title sheet") ||
+    lower.includes("index")
+  )
+}
+
+function titleCaseLoose(input: string) {
+  return input.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase())
+}
+
+function getRegionText(
+  width: number,
+  height: number,
+  tokens: PositionalTextToken[],
+  fullText: string,
+  region: RegionName,
+): string {
+  if (!tokens.length) {
+    if (region === "tailText") {
+      return fullText.slice(Math.floor(fullText.length * 0.7)).trim() || fullText
+    }
+
+    if (region === "bottomRight") {
+      return fullText.slice(Math.floor(fullText.length * 0.8)).trim() || fullText
+    }
+
+    if (region === "bottomBand" || region === "bottomCenter") {
+      return fullText.slice(Math.floor(fullText.length * 0.65)).trim() || fullText
+    }
+
+    if (region === "topBand") {
+      return fullText.slice(0, Math.max(0, Math.floor(fullText.length * 0.35))).trim() || fullText
+    }
+
+    return fullText
+  }
+
+  let filtered = tokens
+
+  if (region === "bottomRight") {
+    const minX = width * 0.6
+    const maxY = height * 0.24
+    filtered = tokens.filter((item) => item.x >= minX && item.y <= maxY)
+  } else if (region === "bottomBand") {
+    const maxY = height * 0.24
+    filtered = tokens.filter((item) => item.y <= maxY)
+  } else if (region === "bottomCenter") {
+    const minX = width * 0.25
+    const maxX = width * 0.75
+    const maxY = height * 0.25
+    filtered = tokens.filter((item) => item.x >= minX && item.x <= maxX && item.y <= maxY)
+  } else if (region === "topBand") {
+    const minY = height * 0.76
+    filtered = tokens.filter((item) => item.y >= minY)
+  } else if (region === "tailText") {
+    const joined = tokens.map((t) => t.text).join(" ").replace(/\s+/g, " ").trim()
+    return joined.slice(Math.floor(joined.length * 0.7)).trim() || fullText
+  }
+
+  const text = filtered
+    .map((item) => item.text)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim()
+
+  return text || fullText
+}
+
+function detectTitleBlockZones(
+  width: number,
+  height: number,
+  tokens: PositionalTextToken[],
+  fullText: string,
+): ZoneCandidate[] {
+  const zones: ZoneCandidate[] = []
+
+  const regions: Array<{
+    label: string
+    region: RegionName
+    xMin?: number
+    xMax?: number
+    yMin?: number
+    yMax?: number
+  }> = [
+    {
+      label: "Bottom Right",
+      region: "bottomRight",
+      xMin: width * 0.6,
+      xMax: width,
+      yMin: 0,
+      yMax: height * 0.24,
+    },
+    {
+      label: "Bottom Band",
+      region: "bottomBand",
+      xMin: 0,
+      xMax: width,
+      yMin: 0,
+      yMax: height * 0.24,
+    },
+    {
+      label: "Bottom Center",
+      region: "bottomCenter",
+      xMin: width * 0.25,
+      xMax: width * 0.75,
+      yMin: 0,
+      yMax: height * 0.25,
+    },
+    {
+      label: "Top Band",
+      region: "topBand",
+      xMin: 0,
+      xMax: width,
+      yMin: height * 0.76,
+      yMax: height,
+    },
+  ]
+
+  for (const candidate of regions) {
+    const text = getRegionText(width, height, tokens, fullText, candidate.region)
+    const codes = extractCodeCandidatesFromText(text)
+    const score =
+      candidate.region === "bottomRight"
+        ? codes.length > 0
+          ? 0.92
+          : 0.2
+        : candidate.region === "bottomBand"
+          ? codes.length > 0
+            ? 0.75
+            : 0.15
+          : candidate.region === "bottomCenter"
+            ? codes.length > 0
+              ? 0.7
+              : 0.18
+            : candidate.region === "topBand"
+              ? codes.length > 0
+                ? 0.35
+                : 0.05
+              : 0.05
+
+    zones.push({
+      label: candidate.label,
+      score,
+      xMin: candidate.xMin,
+      xMax: candidate.xMax,
+      yMin: candidate.yMin,
+      yMax: candidate.yMax,
+      reason: codes.length > 0 ? `Detected ${codes.length} sheet-code candidate(s)` : "No strong code candidates detected",
+    })
+  }
+
+  return zones.sort((a, b) => b.score - a.score)
+}
+
+function extractSheetNumberCandidates(
+  fullText: string,
+  width: number,
+  height: number,
+  tokens: PositionalTextToken[],
+): CandidateValue<string>[] {
+  const regions: RegionText[] = [
+    { region: "bottomRight", text: getRegionText(width, height, tokens, fullText, "bottomRight") },
+    { region: "bottomBand", text: getRegionText(width, height, tokens, fullText, "bottomBand") },
+    { region: "bottomCenter", text: getRegionText(width, height, tokens, fullText, "bottomCenter") },
+    { region: "tailText", text: getRegionText(width, height, tokens, fullText, "tailText") },
+    { region: "topBand", text: getRegionText(width, height, tokens, fullText, "topBand") },
+    { region: "whole", text: getRegionText(width, height, tokens, fullText, "whole") },
+  ]
+
+  const bestByCode = new Map<string, CandidateValue<string>>()
+
+  for (const region of regions) {
+    const codes = extractCodeCandidatesFromText(region.text)
+
+    for (const code of codes) {
+      const score = scoreSheetCodeCandidate(fullText, code, region.region, region.text)
+
+      const source: CandidateSource =
+        region.region === "bottomRight"
+          ? "TITLEBLOCK_ZONE"
+          : region.region === "whole"
+            ? "REGEX"
+            : "TEXT_PATTERN"
+
+      const candidate: CandidateValue<string> = {
+        value: code,
+        score,
+        source,
+        reason: `Extracted from ${region.region}`,
+      }
+
+      const existing = bestByCode.get(code)
+      if (!existing || candidate.score > existing.score) {
+        bestByCode.set(code, candidate)
+      }
+    }
+  }
+
+  return [...bestByCode.values()].sort((a, b) => b.score - a.score).slice(0, 6)
+}
+
+function extractTitleCandidatesFromRegion(
+  text: string,
+  sheetCodes: string[],
+  region: RegionName,
+): CandidateValue<string>[] {
+  const lines = text
+    .split(/(?<=\b[A-Z]{2,}\b)\s+(?=[A-Z][A-Z0-9/ -]{4,})/g)
+    .flatMap((x) => x.split(/\s{2,}/g))
+    .flatMap((x) => x.split(/\s(?=[A-Z][A-Z][A-Z])/g))
+    .flatMap((x) => x.split(/\n+/g))
+    .map((x) => cleanTitle(x))
+    .filter(Boolean)
+
+  const best = new Map<string, CandidateValue<string>>()
+
+  for (const line of lines) {
+    let work = line
+
+    for (const code of sheetCodes) {
+      work = work.replace(new RegExp(code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), "").trim()
+    }
+
+    work = cleanTitle(work)
+    if (!work) continue
+    if (looksLikeBadTitle(work)) continue
+    if (looksLikeBadIndexedTitle(work)) continue
+    if (!hasTitleSignal(work)) continue
+    if (work.length > 120) continue
+
+    let score =
+      region === "bottomRight"
+        ? 0.88
+        : region === "bottomBand"
+          ? 0.8
+          : region === "bottomCenter"
+            ? 0.9
+            : region === "topBand"
+              ? 0.55
+              : region === "tailText"
+                ? 0.68
+                : 0.5
+
+    if (work.toLowerCase().includes("cover sheet")) score += 0.05
+    if (work.toLowerCase().includes("site plan")) score += 0.05
+    if (work.toLowerCase().includes("one line diagram")) score += 0.05
+    if (work.toLowerCase().includes("one-line diagram")) score += 0.05
+
+    const normalized = titleCaseLoose(work)
+
+    const source: CandidateSource =
+      region === "bottomRight" || region === "bottomBand" || region === "bottomCenter"
+        ? "TITLEBLOCK_ZONE"
+        : "TEXT_PATTERN"
+
+    const candidate: CandidateValue<string> = {
+      value: normalized,
+      score: Math.min(0.99, score),
+      source,
+      reason: `Title-like line found in ${region}`,
+    }
+
+    const existing = best.get(normalized)
+    if (!existing || candidate.score > existing.score) {
+      best.set(normalized, candidate)
+    }
+  }
+
+  return [...best.values()].sort((a, b) => b.score - a.score).slice(0, 6)
+}
+
+function extractSheetTitleCandidates(
+  fullText: string,
+  width: number,
+  height: number,
+  tokens: PositionalTextToken[],
+  sheetNumberCandidates: CandidateValue<string>[],
+): CandidateValue<string>[] {
+  const codes = sheetNumberCandidates.map((c) => c.value)
+
+  const regions: RegionText[] = [
+    { region: "bottomRight", text: getRegionText(width, height, tokens, fullText, "bottomRight") },
+    { region: "bottomBand", text: getRegionText(width, height, tokens, fullText, "bottomBand") },
+    { region: "bottomCenter", text: getRegionText(width, height, tokens, fullText, "bottomCenter") },
+    { region: "tailText", text: getRegionText(width, height, tokens, fullText, "tailText") },
+    { region: "topBand", text: getRegionText(width, height, tokens, fullText, "topBand") },
+    { region: "whole", text: getRegionText(width, height, tokens, fullText, "whole") },
+  ]
+
+  const best = new Map<string, CandidateValue<string>>()
+
+  for (const region of regions) {
+    const candidates = extractTitleCandidatesFromRegion(region.text, codes, region.region)
+    for (const candidate of candidates) {
+      const existing = best.get(candidate.value)
+      if (!existing || candidate.score > existing.score) {
+        best.set(candidate.value, candidate)
+      }
+    }
+  }
+
+  return [...best.values()].sort((a, b) => b.score - a.score).slice(0, 6)
+}
+
+function inferPageClassFromText(fullText: string): CandidateValue<PageClass>[] {
+  const lower = fullText.toLowerCase()
+  const out: CandidateValue<PageClass>[] = []
+
+  let drawingScore = 0
+  if (lower.includes("plan")) drawingScore += 0.2
+  if (lower.includes("schedule")) drawingScore += 0.15
+  if (lower.includes("detail")) drawingScore += 0.15
+  if (lower.includes("legend")) drawingScore += 0.1
+  if (lower.includes("riser")) drawingScore += 0.1
+  if (lower.includes("one-line") || lower.includes("one line")) drawingScore += 0.15
+
+  let specScore = 0
+  if (/\bsection\s+\d{2}\s+\d{2}\s+\d{2}/i.test(fullText)) specScore += 0.55
+  if (/\b\d{2}\s+\d{2}\s+\d{2}\b/.test(fullText)) specScore += 0.45
+  if (lower.includes("part 1")) specScore += 0.1
+  if (lower.includes("part 2")) specScore += 0.1
+  if (lower.includes("part 3")) specScore += 0.1
+  if (lower.includes("submittals")) specScore += 0.08
+  if (lower.includes("references")) specScore += 0.08
+  if (lower.includes("products")) specScore += 0.08
+  if (lower.includes("execution")) specScore += 0.08
+
+  let bidScore = 0
+  if (lower.includes("instructions to bidders")) bidScore += 0.45
+  if (lower.includes("bid form")) bidScore += 0.35
+  if (lower.includes("notice to bidders")) bidScore += 0.3
+  if (lower.includes("invitation to bid")) bidScore += 0.3
+  if (lower.includes("proposal form")) bidScore += 0.3
+  if (lower.includes("general conditions")) bidScore += 0.25
+  if (lower.includes("supplementary conditions")) bidScore += 0.25
+
+  if (drawingScore > 0) {
+    out.push({
+      value: "DRAWING",
+      score: Math.min(0.95, 0.45 + drawingScore),
+      source: "TEXT_PATTERN",
+      reason: "Drawing-related terms found on page",
+    })
+  }
+
+  if (specScore > 0) {
+    out.push({
+      value: "SPEC",
+      score: Math.min(0.95, 0.35 + specScore),
+      source: "TEXT_PATTERN",
+      reason: "Specification-related terms found on page",
+    })
+  }
+
+  if (bidScore > 0) {
+    out.push({
+      value: "BID",
+      score: Math.min(0.95, 0.35 + bidScore),
+      source: "TEXT_PATTERN",
+      reason: "Bid/front-end terms found on page",
+    })
+  }
+
+  if (out.length === 0) {
+    out.push({
+      value: "UNKNOWN",
+      score: 0.2,
+      source: "UNKNOWN",
+      reason: "No strong page class signal found",
+    })
+  }
+
+  return out.sort((a, b) => b.score - a.score)
+}
+
+function inferSheetSubtype(
+  fullText: string,
+  titleCandidates: CandidateValue<string>[],
+): CandidateValue<SheetSubtype>[] {
+  const combined = `${fullText} ${titleCandidates.map((t) => t.value).join(" ")}`.toLowerCase()
+  const out: CandidateValue<SheetSubtype>[] = []
+
+  const planSignals = [
+    "site plan",
+    "floor plan",
+    "power plan",
+    "lighting plan",
+    "electrical plan",
+    "demolition plan",
+    "plan view",
+  ]
+
+  const detailSignals = [
+    "detail",
+    "details",
+    "diagram",
+    "one line diagram",
+    "one-line diagram",
+    "single line diagram",
+    "elevation",
+    "legend",
+    "schedule",
+    "riser",
+    "photo",
+    "photos",
+    "notes",
+  ]
+
+  if (planSignals.some((s) => combined.includes(s))) {
+    out.push({
+      value: "PLAN",
+      score: 0.86,
+      source: "TEXT_PATTERN",
+      reason: "Plan-related terms found",
+    })
+  }
+
+  if (detailSignals.some((s) => combined.includes(s))) {
+    out.push({
+      value: "DETAIL",
+      score: 0.82,
+      source: "TEXT_PATTERN",
+      reason: "Detail/diagram-related terms found",
+    })
+  }
+
+  if (
+    combined.includes("cover sheet") ||
+    combined.includes("title sheet") ||
+    combined.includes("sheet index")
+  ) {
+    out.push({
+      value: "NO_SCALE_NEEDED",
+      score: 0.95,
+      source: "TEXT_PATTERN",
+      reason: "Title/index sheet does not require scale",
+    })
+  }
+
+  if (out.length === 0) {
+    out.push({
+      value: "UNKNOWN",
+      score: 0.25,
+      source: "UNKNOWN",
+      reason: "No strong sheet subtype signal found",
+    })
+  }
+
+  return out.sort((a, b) => b.score - a.score)
+}
+
+function inferDiscipline(
+  sheetNumberCandidates: CandidateValue<string>[],
+): CandidateValue<string>[] {
+  const out: CandidateValue<string>[] = []
+  const seen = new Set<string>()
+
+  for (const candidate of sheetNumberCandidates) {
+    const code = candidate.value
+    const prefix = normalizeSheetCode(code).charAt(0)
+
+    let discipline: string | null = null
+    if (prefix === "E") discipline = "Electrical"
+    else if (prefix === "P") discipline = "Plumbing"
+    else if (prefix === "A") discipline = "Architectural"
+    else if (prefix === "M") discipline = "Mechanical"
+    else if (prefix === "S") discipline = "Structural"
+    else if (prefix === "C") discipline = "Civil"
+    else if (prefix === "T") discipline = "Telecom"
+    else if (prefix === "F") discipline = "Fire Protection"
+    else if (prefix === "G") discipline = "General"
+    else if (prefix === "L") discipline = "Landscape"
+    else if (prefix === "I") discipline = "Instrumentation"
+
+    if (!discipline || seen.has(discipline)) continue
+    seen.add(discipline)
+
+    out.push({
+      value: discipline,
+      score: Math.min(0.95, candidate.score),
+      source: "TEXT_PATTERN",
+      reason: `Derived from sheet-number prefix ${prefix}`,
+    })
+  }
+
+  return out
+}
+
+function makeStringCandidate(
+  value: string | null | undefined,
+  score = 0.9,
+  reason = "Derived from existing deterministic logic",
+): CandidateValue<string>[] {
+  if (!value) return []
+  return [
+    {
+      value: cleanTitle(value),
+      score,
+      source: "EXISTING_LOGIC",
+      reason,
+    },
+  ]
+}
+
+function makeEnumCandidate<T extends string>(
+  value: T | null | undefined,
+  score = 0.9,
+  reason = "Derived from existing deterministic logic",
+): CandidateValue<T>[] {
+  if (!value) return []
+  return [
+    {
+      value,
+      score,
+      source: "EXISTING_LOGIC",
+      reason,
+    },
+  ]
+}
+
+function dedupeCandidates<T extends string>(
+  input: CandidateValue<T>[],
+): CandidateValue<T>[] {
+  const best = new Map<string, CandidateValue<T>>()
+
+  for (const candidate of input) {
+    const key = String(candidate.value)
+    const existing = best.get(key)
+    if (!existing || candidate.score > existing.score) {
+      best.set(key, candidate)
+    }
+  }
+
+  return [...best.values()].sort((a, b) => b.score - a.score)
+}
+
+function chooseHighConfidenceString(
+  candidates: CandidateValue<string>[],
+  threshold: number,
+): InferredValue<string> {
+  const best = candidates[0]
+  if (best && best.score >= threshold) {
+    return {
+      value: best.value,
+      confidence: best.score,
+      source: best.source,
+      reason: best.reason,
+    }
+  }
+
+  return {
+    value: null,
+    confidence: best?.score ?? 0.1,
+    source: best?.source ?? "UNKNOWN",
+    reason: best?.reason ?? "No high-confidence value selected in deterministic layer",
+  }
+}
+
+function chooseHighConfidenceEnum<T extends string>(
+  candidates: CandidateValue<T>[],
+  threshold: number,
+  fallback: T,
+): InferredValue<T> {
+  const best = candidates[0]
+  if (best && best.score >= threshold) {
+    return {
+      value: best.value,
+      confidence: best.score,
+      source: best.source,
+      reason: best.reason,
+    }
+  }
+
+  return {
+    value: fallback,
+    confidence: best?.score ?? 0.1,
+    source: best?.source ?? "UNKNOWN",
+    reason: best?.reason ?? "No high-confidence enum selected in deterministic layer",
+  }
+}
+
+export function buildPageEvidence(
+  input: ExistingPageDetectionInput,
+): PageEvidence {
+  const fullText = normalizeText(input.fullText ?? "")
+  const lines = normalizeLines(
+    input.lines && input.lines.length > 0 ? input.lines : fullText.split("\n"),
+  )
+
+  const textDensity = fullText.length > 0 ? Math.min(1, fullText.length / 4000) : 0
+  const width = input.width ?? 0
+  const height = input.height ?? 0
+  const tokens = input.tokens ?? []
+
+  const titleBlockZones = detectTitleBlockZones(width, height, tokens, fullText)
+
+  const sheetNumberCandidates = dedupeCandidates([
+    ...extractSheetNumberCandidates(fullText, width, height, tokens),
+    ...makeStringCandidate(input.detectedSheetNumber, 0.95),
+  ])
+
+  const sheetTitleCandidates = dedupeCandidates([
+    ...extractSheetTitleCandidates(fullText, width, height, tokens, sheetNumberCandidates),
+    ...makeStringCandidate(input.detectedSheetName, 0.95),
+  ])
+
+  const pageClassCandidates = dedupeCandidates([
+    ...inferPageClassFromText(fullText),
+    ...makeEnumCandidate<PageClass>(input.detectedPageClass ?? null, 0.95),
+  ])
+
+  const sheetSubtypeCandidates = dedupeCandidates([
+    ...inferSheetSubtype(fullText, sheetTitleCandidates),
+    ...makeEnumCandidate<SheetSubtype>(input.detectedSheetSubtype ?? null, 0.95),
+  ])
+
+  const disciplineCandidates = dedupeCandidates([
+    ...inferDiscipline(sheetNumberCandidates),
+    ...makeStringCandidate(input.detectedDiscipline, 0.95),
+  ])
+
+  const baselinePageClass = chooseHighConfidenceEnum<PageClass>(
+    pageClassCandidates,
+    HIGH_CONFIDENCE_PAGE_CLASS,
+    "UNKNOWN",
+  )
+
+  const baselineSheetNumber =
+    baselinePageClass.value === "DRAWING"
+      ? chooseHighConfidenceString(sheetNumberCandidates, HIGH_CONFIDENCE_SHEET_NUMBER)
+      : {
+          value: null,
+          confidence: 0.95,
+          source: "EXISTING_LOGIC" as CandidateSource,
+          reason: "Sheet number intentionally left empty for non-drawing page",
+        }
+
+  const baselineSheetName =
+    baselinePageClass.value === "DRAWING"
+      ? chooseHighConfidenceString(sheetTitleCandidates, HIGH_CONFIDENCE_SHEET_TITLE)
+      : chooseHighConfidenceString(sheetTitleCandidates, 0.95)
+
+  const baselineSheetSubtype =
+    baselinePageClass.value === "DRAWING"
+      ? chooseHighConfidenceEnum<SheetSubtype>(
+          sheetSubtypeCandidates,
+          HIGH_CONFIDENCE_SHEET_SUBTYPE,
+          "UNKNOWN",
+        )
+      : {
+          value: "NO_SCALE_NEEDED" as SheetSubtype,
+          confidence: 0.95,
+          source: "EXISTING_LOGIC" as CandidateSource,
+          reason: "Non-drawing pages do not require drawing scale subtype",
+        }
+
+  const baselineDiscipline =
+    baselinePageClass.value === "DRAWING"
+      ? chooseHighConfidenceString(disciplineCandidates, HIGH_CONFIDENCE_DISCIPLINE)
+      : {
+          value: null,
+          confidence: 0.7,
+          source: "UNKNOWN" as CandidateSource,
+          reason: "Discipline intentionally left empty for non-drawing page unless resolved later",
+        }
+
+  return {
+    pageNumber: input.pageNumber,
+    pdfFacts: {
+      width: input.width ?? null,
+      height: input.height ?? null,
+      printSize: input.printSize ?? null,
+      rotation: input.rotation ?? null,
+      isRasterLikely: input.isRasterLikely ?? false,
+      isSearchable: input.isSearchable ?? true,
+      textDensity,
+    },
+    rawText: {
+      fullText,
+      normalizedText: fullText.toUpperCase(),
+      lines,
+      tokens,
+    },
+    candidateSignals: {
+      sheetNumbers: sheetNumberCandidates,
+      sheetTitles: sheetTitleCandidates,
+      pageClasses: pageClassCandidates,
+      sheetSubtypes: sheetSubtypeCandidates,
+      disciplines: disciplineCandidates,
+      specSections: [],
+      titleBlockZones,
+      indexReferences: [],
+    },
+    baselineDetections: {
+      pageClass: baselinePageClass,
+      sheetNumber: baselineSheetNumber,
+      sheetName: baselineSheetName,
+      sheetSubtype: baselineSheetSubtype,
+      discipline: baselineDiscipline,
+      scaleStatus: {
+        value: input.detectedScaleStatus ?? "UNVERIFIED",
+        confidence: 0.95,
+        source: "EXISTING_LOGIC",
+        reason: "Scale state comes from upstream analysis",
+      },
+      scaleConfidence: input.detectedScaleConfidence ?? 0,
+    },
+    extractionWarnings: input.warnings ?? [],
+  }
+}
+
+==================== lib\intake\layer2-structure-inference.ts ====================
+
+import {
+  ConflictSet,
+  DocumentContext,
+  DuplicateCandidate,
+  NumberingSchema,
+  PageEvidence,
+  ReviewFlag,
+  SheetInference,
+} from "./types"
+import { runLayer3LlmResolution } from "./layer3-llm-resolution"
+import type {
+  LlmAssistResult,
+  LlmPdfPageText,
+} from "../llm-intake"
+
+type Layer2Input = {
+  uploadId: string
+  filename: string | null
+  pages: PageEvidence[]
+  llmPages: LlmPdfPageText[]
+}
+
+type Layer2Output = {
+  documentContext: DocumentContext
+  sheets: SheetInference[]
+  llmAssist: LlmAssistResult | null
+}
+
+const LLM_CONFIDENCE_THRESHOLD = 0.9
+
+function normalizeSheetNumber(value: string): string {
+  return value.replace(/\s+/g, "").replace(/[–—]/g, "-").toUpperCase().trim()
+}
+
+function normalizeTitle(value: string | null | undefined): string | null {
+  if (!value) return null
+  const cleaned = value.replace(/\s+/g, " ").trim()
+  return cleaned.length ? cleaned : null
+}
+
+function isGenericTitle(value: string | null | undefined): boolean {
+  const lower = (value ?? "").trim().toLowerCase()
+  if (!lower) return true
+
+  return new Set([
+    "plan",
+    "plans",
+    "detail",
+    "details",
+    "diagram",
+    "diagrams",
+    "notes",
+    "general notes",
+    "site",
+    "legend",
+    "schedule",
+    "schedules",
+    "sheet",
+    "drawing",
+    "page",
+  ]).has(lower)
+}
+
+function looksLikeGarbageTitle(value: string | null | undefined): boolean {
+  const clean = (value ?? "").trim()
+  if (!clean) return false
+  if (clean.length < 4) return true
+  if (/^[A-Z0-9-]{5,}$/i.test(clean)) return true
+  if (/^[A-Z]{2,}\d{3,}$/i.test(clean)) return true
+  if (/^\d+$/.test(clean)) return true
+  return false
+}
+
+function detectDuplicateSheetNumbers(
+  pages: PageEvidence[],
+): DuplicateCandidate[] {
+  const buckets = new Map<string, number[]>()
+
+  for (const page of pages) {
+    const number = page.baselineDetections.sheetNumber.value?.trim()
+    if (!number) continue
+
+    const normalized = normalizeSheetNumber(number)
+    const existing = buckets.get(normalized) ?? []
+    existing.push(page.pageNumber)
+    buckets.set(normalized, existing)
+  }
+
+  return [...buckets.entries()]
+    .filter(([, pageNumbers]) => pageNumbers.length > 1)
+    .map(([sheetNumber, pageNumbers]) => ({
+      sheetNumber,
+      pageNumbers,
+    }))
+}
+
+function buildReviewFlags(
+  page: PageEvidence,
+  duplicateCandidates: DuplicateCandidate[],
+  overallConfidence: number,
+): ReviewFlag[] {
+  const flags: ReviewFlag[] = []
+
+  const pageClass = page.baselineDetections.pageClass.value ?? "UNKNOWN"
+  const isDrawingPage = pageClass === "DRAWING"
+  const isSpecOrBidPage = pageClass === "SPEC" || pageClass === "BID"
+
+  const sheetNumber = page.baselineDetections.sheetNumber.value
+  const sheetName = page.baselineDetections.sheetName.value
+  const titleBlockTop = page.candidateSignals.titleBlockZones?.[0]
+
+  if (pageClass === "UNKNOWN") {
+    flags.push("PAGE_CLASS_AMBIGUOUS")
+  }
+
+  if (page.pdfFacts.textDensity < 0.05) {
+    flags.push("LOW_TEXT_DENSITY")
+  }
+
+  if (page.pdfFacts.isRasterLikely) {
+    flags.push("LIKELY_RASTER_LIMITATION")
+  }
+
+  if (isDrawingPage) {
+    if (!sheetNumber || overallConfidence < 0.5) {
+      flags.push("LOW_CONFIDENCE_SHEET_NUMBER")
+    }
+
+    if (!sheetName || looksLikeGarbageTitle(sheetName)) {
+      flags.push("LOW_CONFIDENCE_SHEET_NAME")
+    }
+
+    if (isGenericTitle(sheetName)) {
+      flags.push("GENERIC_TITLE")
+    }
+
+    if (page.candidateSignals.sheetNumbers.length > 1) {
+      flags.push("MULTIPLE_NUMBER_CANDIDATES")
+    }
+
+    if (!titleBlockTop || titleBlockTop.score < 0.35) {
+      flags.push("TITLEBLOCK_NOT_FOUND")
+    }
+
+    const dup = duplicateCandidates.find((d) =>
+      d.pageNumbers.includes(page.pageNumber),
+    )
+    if (dup) {
+      flags.push("DUPLICATE_SHEET_NUMBER")
+    }
+  }
+
+  if (isSpecOrBidPage) {
+    const hasGoodSectionSignal =
+      Boolean(page.rawText.fullText.match(/\bsection\s+\d{2}\s+\d{2}\s+\d{2}\b/i)) ||
+      Boolean(page.rawText.fullText.match(/\b\d{2}\s+\d{2}\s+\d{2}\b/))
+
+    if (!hasGoodSectionSignal && overallConfidence < 0.75) {
+      flags.push("LOW_CONFIDENCE_SHEET_NAME")
+    }
+  }
+
+  return Array.from(new Set(flags))
+}
+
+function capDrawingConfidence(page: PageEvidence) {
+  let sheetNumber = page.baselineDetections.sheetNumber.confidence
+  let sheetName = page.baselineDetections.sheetName.confidence
+  let pageClass = page.baselineDetections.pageClass.confidence
+  let sheetSubtype = page.baselineDetections.sheetSubtype.confidence
+  let discipline = page.baselineDetections.discipline.confidence
+
+  const hasSheetNumber = Boolean(page.baselineDetections.sheetNumber.value)
+  const title = normalizeTitle(page.baselineDetections.sheetName.value)
+  const titleBlockTop = page.candidateSignals.titleBlockZones?.[0]
+  const titleBlockScore = titleBlockTop?.score ?? 0
+
+  if (!hasSheetNumber) {
+    sheetNumber = Math.min(sheetNumber, 0.2)
+  } else {
+    sheetNumber = Math.min(sheetNumber, titleBlockScore >= 0.6 ? 0.82 : 0.62)
+  }
+
+  if (!title || looksLikeGarbageTitle(title)) {
+    sheetName = Math.min(sheetName, 0.15)
+  } else if (isGenericTitle(title)) {
+    sheetName = Math.min(sheetName, 0.35)
+  } else {
+    sheetName = Math.min(sheetName, titleBlockScore >= 0.6 ? 0.8 : 0.6)
+  }
+
+  if (titleBlockScore < 0.35) {
+    sheetNumber = Math.min(sheetNumber, 0.5)
+    sheetName = Math.min(sheetName, 0.45)
+  }
+
+  pageClass = Math.min(pageClass, 0.88)
+  sheetSubtype = Math.min(sheetSubtype, 0.75)
+  discipline = Math.min(discipline, 0.78)
+
+  return {
+    sheetNumber,
+    sheetName,
+    pageClass,
+    sheetSubtype,
+    discipline,
+  }
+}
+
+function capSpecOrBidConfidence(page: PageEvidence) {
+  let sheetNumber = 0
+  let sheetName = 0
+  let pageClass = page.baselineDetections.pageClass.confidence
+  let sheetSubtype = 0.95
+  let discipline = Math.min(page.baselineDetections.discipline.confidence, 0.6)
+
+  const text = page.rawText.fullText
+  const hasSectionNumber =
+    /\bsection\s+\d{2}\s+\d{2}\s+\d{2}\b/i.test(text) ||
+    /\b\d{2}\s+\d{2}\s+\d{2}\b/.test(text)
+
+  if (hasSectionNumber) {
+    pageClass = Math.max(Math.min(pageClass, 0.95), 0.9)
+    sheetName = 0.82
+  } else {
+    pageClass = Math.min(pageClass, 0.78)
+    sheetName = 0.55
+  }
+
+  return {
+    sheetNumber,
+    sheetName,
+    pageClass,
+    sheetSubtype,
+    discipline,
+  }
+}
+
+function capUnknownConfidence(page: PageEvidence) {
+  return {
+    sheetNumber: Math.min(page.baselineDetections.sheetNumber.confidence, 0.15),
+    sheetName: Math.min(page.baselineDetections.sheetName.confidence, 0.15),
+    pageClass: Math.min(page.baselineDetections.pageClass.confidence, 0.4),
+    sheetSubtype: Math.min(page.baselineDetections.sheetSubtype.confidence, 0.2),
+    discipline: Math.min(page.baselineDetections.discipline.confidence, 0.2),
+  }
+}
+
+function buildSheetInference(
+  page: PageEvidence,
+  duplicateCandidates: DuplicateCandidate[],
+): SheetInference {
+  const pageClass = page.baselineDetections.pageClass.value ?? "UNKNOWN"
+
+  let confidenceParts: {
+    sheetNumber: number
+    sheetName: number
+    pageClass: number
+    sheetSubtype: number
+    discipline: number
+  }
+
+  if (pageClass === "DRAWING") {
+    confidenceParts = capDrawingConfidence(page)
+  } else if (pageClass === "SPEC" || pageClass === "BID") {
+    confidenceParts = capSpecOrBidConfidence(page)
+  } else {
+    confidenceParts = capUnknownConfidence(page)
+  }
+
+  const overall =
+    (
+      confidenceParts.sheetNumber +
+      confidenceParts.sheetName +
+      confidenceParts.pageClass +
+      confidenceParts.sheetSubtype +
+      confidenceParts.discipline
+    ) / 5
+
+  return {
+    pageNumber: page.pageNumber,
+    final: {
+      sheetNumber:
+        pageClass === "DRAWING"
+          ? page.baselineDetections.sheetNumber.value
+          : null,
+      sheetName:
+        pageClass === "DRAWING"
+          ? normalizeTitle(page.baselineDetections.sheetName.value)
+          : null,
+      pageClass,
+      sheetSubtype:
+        pageClass === "SPEC" || pageClass === "BID"
+          ? "NO_SCALE_NEEDED"
+          : page.baselineDetections.sheetSubtype.value ?? "UNKNOWN",
+      discipline: page.baselineDetections.discipline.value,
+      scaleStatus: page.baselineDetections.scaleStatus.value ?? "UNVERIFIED",
+      scaleConfidence: page.baselineDetections.scaleConfidence,
+      printSize: page.pdfFacts.printSize,
+    },
+    confidence: {
+      overall,
+      sheetNumber: confidenceParts.sheetNumber,
+      sheetName: confidenceParts.sheetName,
+      pageClass: confidenceParts.pageClass,
+      sheetSubtype: confidenceParts.sheetSubtype,
+      discipline: confidenceParts.discipline,
+    },
+    provenance: {
+      sheetNumber: "LAYER1",
+      sheetName: "LAYER1",
+      pageClass: "LAYER1",
+      sheetSubtype: "LAYER1",
+      discipline: "LAYER1",
+    },
+    reviewFlags: buildReviewFlags(page, duplicateCandidates, overall),
+  }
+}
+
+function buildPrintSizeDistribution(
+  pages: PageEvidence[],
+): Record<string, number> {
+  const counts: Record<string, number> = {}
+
+  for (const page of pages) {
+    const key = page.pdfFacts.printSize ?? "UNKNOWN"
+    counts[key] = (counts[key] ?? 0) + 1
+  }
+
+  return counts
+}
+
+function buildLikelyIndexPages(pages: PageEvidence[]): number[] {
+  const out: number[] = []
+
+  for (const page of pages) {
+    const text = page.rawText.normalizedText
+    const pageNumber = page.pageNumber
+
+    let score = 0
+    if (pageNumber <= 5) score += 2
+    if (text.includes("SHEET INDEX")) score += 5
+    if (text.includes("DRAWING INDEX")) score += 5
+    if (text.includes("INDEX OF DRAWINGS")) score += 5
+    if (text.includes("LIST OF DRAWINGS")) score += 5
+
+    const codeMatches = text.match(/\b[A-Z]{1,4}(?:-\d{1,4}|\d{2,4})(?:\.\d{1,3})?\b/g) ?? []
+    if (codeMatches.length >= 4) score += 2
+    if (codeMatches.length >= 8) score += 2
+
+    if (score >= 6) out.push(page.pageNumber)
+  }
+
+  return out
+}
+
+export async function runLayer2StructureInference(
+  input: Layer2Input,
+): Promise<Layer2Output> {
+  const sortedPages = [...input.pages].sort((a, b) => a.pageNumber - b.pageNumber)
+
+  const duplicateCandidates = detectDuplicateSheetNumbers(sortedPages)
+  const likelyIndexPages = buildLikelyIndexPages(sortedPages)
+
+  const baseSheets = sortedPages.map((page) =>
+    buildSheetInference(page, duplicateCandidates),
+  )
+
+  const lowConfidencePageNumbers = new Set(
+    baseSheets
+      .filter((sheet) => {
+        if (sheet.confidence.overall < LLM_CONFIDENCE_THRESHOLD) return true
+        if (sheet.reviewFlags.includes("PAGE_CLASS_AMBIGUOUS")) return true
+        if (sheet.reviewFlags.includes("GENERIC_TITLE")) return true
+        if (sheet.reviewFlags.includes("LOW_CONFIDENCE_SHEET_NAME")) return true
+        if (sheet.reviewFlags.includes("LOW_CONFIDENCE_SHEET_NUMBER")) return true
+        if (sheet.reviewFlags.includes("TITLEBLOCK_NOT_FOUND")) return true
+        return false
+      })
+      .map((sheet) => sheet.pageNumber),
+  )
+
+  let sheets = baseSheets
+  let llmAssist: LlmAssistResult | null = null
+
+  if (lowConfidencePageNumbers.size > 0 && input.llmPages.length > 0) {
+    const pagesForLlm = input.llmPages.filter((page) =>
+      lowConfidencePageNumbers.has(page.pageNumber),
+    )
+
+    const layer3 = await runLayer3LlmResolution({
+      uploadId: input.uploadId,
+      filename: input.filename,
+      pages: pagesForLlm,
+      sheets: baseSheets,
+    })
+
+    sheets = layer3.sheets
+    llmAssist = layer3.llm
+  }
+
+  const orphanPages = sheets
+    .filter((sheet) => {
+      if (sheet.final.pageClass === "DRAWING") {
+        return !sheet.final.sheetNumber || !sheet.final.sheetName
+      }
+      if (sheet.final.pageClass === "SPEC" || sheet.final.pageClass === "BID") {
+        return sheet.confidence.pageClass < 0.8
+      }
+      return true
+    })
+    .map((sheet) => sheet.pageNumber)
+
+  const documentContext: DocumentContext = {
+    uploadId: input.uploadId,
+    pageCount: sortedPages.length,
+    pages: sortedPages,
+    documentPatterns: {
+      numberingSchemas: [] as NumberingSchema[],
+      disciplineGroups: [],
+      likelyIndexPages,
+      titleBlockRegions: [],
+      namingConventions: [],
+      printSizeDistribution: buildPrintSizeDistribution(sortedPages),
+    },
+    inferredStructure: {
+      orderedSheets: sheets,
+      orphanPages,
+      duplicateCandidates,
+      conflictSets: [] as ConflictSet[],
+    },
+  }
+
+  return {
+    documentContext,
+    sheets,
+    llmAssist,
+  }
+}
+
+==================== lib\intake\layer3-llm-resolution.ts ====================
+
+import { SheetInference } from "./types"
+import {
+  refineDetectedSheetsWithLlm,
+  type LlmAssistResult,
+  type LlmDetectedSheet,
+  type LlmPdfPageText,
+} from "../llm-intake"
+
+type Layer3Input = {
+  uploadId: string
+  filename: string | null
+  pages: LlmPdfPageText[]
+  sheets: SheetInference[]
+}
+
+type Layer3Output = {
+  sheets: SheetInference[]
+  llm: LlmAssistResult
+}
+
+function fallbackLlmResult(
+  enabled: boolean,
+  reason: string,
+): LlmAssistResult {
+  return {
+    enabled,
+    used: false,
+    model: null,
+    candidatePages: 0,
+    refinedPages: 0,
+    skippedReason: reason,
+    reportExplanation: null,
+    debugEnvFlagRaw:
+      typeof process.env.MITTENIQ_LLM_INTAKE_ENABLED === "string"
+        ? process.env.MITTENIQ_LLM_INTAKE_ENABLED
+        : null,
+    debugHasApiKey: Boolean(process.env.OPENAI_API_KEY),
+  }
+}
+
+function toLlmDetectedSheets(
+  sheets: SheetInference[],
+): LlmDetectedSheet[] {
+  return sheets.map((sheet) => ({
+    pageNumber: sheet.pageNumber,
+    pageClass: sheet.final.pageClass,
+    sheetNumber: sheet.final.sheetNumber,
+    sheetName: sheet.final.sheetName,
+    discipline: sheet.final.discipline,
+    sectionNumber: null,
+    sectionTitle: null,
+    isElectricalRelated: null,
+    sheetType: sheet.final.sheetSubtype,
+    scaleStatus: sheet.final.scaleStatus,
+    scaleConfidence: sheet.final.scaleConfidence,
+    notes: null,
+  }))
+}
+
+function recomputeOverall(
+  sheet: SheetInference,
+): number {
+  return (
+    sheet.confidence.sheetNumber +
+    sheet.confidence.sheetName +
+    sheet.confidence.pageClass +
+    sheet.confidence.sheetSubtype +
+    sheet.confidence.discipline
+  ) / 5
+}
+
+function applyLlmRefinements(
+  baseSheets: SheetInference[],
+  refinedSheets: LlmDetectedSheet[],
+): SheetInference[] {
+  const refinedByPage = new Map<number, LlmDetectedSheet>()
+  for (const sheet of refinedSheets) {
+    refinedByPage.set(sheet.pageNumber, sheet)
+  }
+
+  return baseSheets.map((sheet) => {
+    const refined = refinedByPage.get(sheet.pageNumber)
+    if (!refined) return sheet
+
+    const next = structuredClone(sheet)
+
+    if (!next.final.sheetNumber && refined.sheetNumber) {
+      next.final.sheetNumber = refined.sheetNumber
+      next.provenance.sheetNumber = "LAYER3"
+      next.confidence.sheetNumber = Math.max(next.confidence.sheetNumber, 0.88)
+    }
+
+    if (refined.pageClass && refined.pageClass !== next.final.pageClass) {
+      next.final.pageClass = refined.pageClass
+      next.provenance.pageClass = "LAYER3"
+      next.confidence.pageClass = Math.max(next.confidence.pageClass, 0.88)
+    }
+
+    if (
+      next.final.pageClass === "DRAWING" &&
+      refined.sheetName &&
+      refined.sheetName !== next.final.sheetName
+    ) {
+      next.final.sheetName = refined.sheetName
+      next.provenance.sheetName = "LAYER3"
+      next.confidence.sheetName = Math.max(next.confidence.sheetName, 0.9)
+    }
+
+    if (
+      next.final.pageClass === "DRAWING" &&
+      refined.sheetType &&
+      refined.sheetType !== next.final.sheetSubtype
+    ) {
+      next.final.sheetSubtype = refined.sheetType
+      next.provenance.sheetSubtype = "LAYER3"
+      next.confidence.sheetSubtype = Math.max(next.confidence.sheetSubtype, 0.86)
+    }
+
+    if (next.final.pageClass === "SPEC" || next.final.pageClass === "BID") {
+      next.final.sheetSubtype = "NO_SCALE_NEEDED"
+    }
+
+    next.confidence.overall = recomputeOverall(next)
+
+    return next
+  })
+}
+
+export async function runLayer3LlmResolution(
+  input: Layer3Input,
+): Promise<Layer3Output> {
+  console.log("Layer3 invoked")
+  console.log("LLM flag:", process.env.MITTENIQ_LLM_INTAKE_ENABLED)
+  console.log("Layer3 pages:", input.pages.length)
+  console.log("Layer3 sheets:", input.sheets.length)
+
+  const enabled =
+    String(process.env.MITTENIQ_LLM_INTAKE_ENABLED ?? "")
+      .trim()
+      .toLowerCase() === "true"
+
+  if (!enabled) {
+    return {
+      sheets: input.sheets,
+      llm: fallbackLlmResult(false, "MITTENIQ_LLM_INTAKE_ENABLED is not true."),
+    }
+  }
+
+  if (!input.pages.length) {
+    return {
+      sheets: input.sheets,
+      llm: fallbackLlmResult(true, "No extracted page text available for Layer 3."),
+    }
+  }
+
+  if (!input.sheets.length) {
+    return {
+      sheets: input.sheets,
+      llm: fallbackLlmResult(true, "No sheet inferences available for Layer 3."),
+    }
+  }
+
+  const pageNumbersForLlm = new Set(input.pages.map((p) => p.pageNumber))
+  const detectedPages = toLlmDetectedSheets(
+    input.sheets.filter((sheet) => pageNumbersForLlm.has(sheet.pageNumber)),
+  )
+
+  const llmResult = await refineDetectedSheetsWithLlm({
+    uploadId: input.uploadId,
+    filename: input.filename,
+    pages: input.pages,
+    detectedPages,
+  })
+
+  const mergedSubset = applyLlmRefinements(
+    input.sheets.filter((sheet) => pageNumbersForLlm.has(sheet.pageNumber)),
+    llmResult.sheets,
+  )
+
+  const mergedMap = new Map<number, SheetInference>()
+  for (const sheet of mergedSubset) {
+    mergedMap.set(sheet.pageNumber, sheet)
+  }
+
+  const finalSheets = input.sheets.map((sheet) => mergedMap.get(sheet.pageNumber) ?? sheet)
+
+  return {
+    sheets: finalSheets,
+    llm: llmResult.llm,
+  }
+}
+
+==================== lib\intake\confidence.ts ====================
+
+
+==================== lib\intake\review-flags.ts ====================
+
+
+==================== lib\intake\sheet-normalization.ts ====================
+
+import { SheetInference } from "./types"
+
+function clean(value: string | null): string | null {
+  if (!value) return null
+  const trimmed = value.replace(/\s+/g, " ").trim()
+  return trimmed.length ? trimmed : null
+}
+
+export function normalizeFinalSheets(
+  sheets: SheetInference[],
+): SheetInference[] {
+  return sheets.map((sheet) => ({
+    ...sheet,
+    final: {
+      ...sheet.final,
+      sheetNumber: clean(sheet.final.sheetNumber),
+      sheetName: clean(sheet.final.sheetName),
+      discipline: clean(sheet.final.discipline),
+      printSize: clean(sheet.final.printSize),
+    },
+  }))
+}

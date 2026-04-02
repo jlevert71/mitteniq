@@ -1,269 +1,366 @@
 # MittenIQ Roadmap
 
-Last updated: 2026-03-05
+Last updated: 2026-03-19
 
 ---
 
-## Core Purpose (Confirmed)
+# Core Purpose
 
-MittenIQ exists to reduce the time and cost required to prepare construction estimates by removing the minutiae involved in setting up an estimate.
+MittenIQ exists to reduce the time, friction, confusion, and mental drag required to prepare construction estimates.
 
-The system is intended to:
-- Serve as an accurate and trustworthy resource for examining project specifications
-- Save estimator time so effort can focus on higher-value work
-- Reduce operational cost compared to traditional estimating workflows
-- Remain simple, reliable, and visually clean with a modern contractor-focused design
+It does that by using AI-driven workflows to handle the tedious setup, document understanding, organization, and review work that estimators currently do manually, inconsistently, or too late.
 
 Primary problem addressed:
 
-Time inefficiency and cost overhead in estimate preparation.
+**Estimators lose time and accuracy before estimating even really starts.**
+
+MittenIQ is being built to remove that setup burden and turn project documents into usable estimating intelligence.
 
 ---
 
-## Product Direction (Confirmed)
+# Product Direction
 
-MittenIQ is being shaped around a small number of meaningful purchased functions rather than a large number of tiny chargeable buttons.
+MittenIQ is a platform of estimating agents.
 
-Confirmed UX direction:
-- Users work inside a **project-scoped workspace**
-- Agents are accessed from the top of the project page
-- Purchased work products are accessed from a **Purchased Functions** report hub
-- Uploads remain visible, but report access is intentionally centered in the Purchased Functions area
-- Savings/efficiency telemetry should remain compact and supportive, not dominant
+The platform model is:
 
-Confirmed monetization/UI principle:
-- Avoid nickel-and-dime function design
-- Combine related capabilities into meaningful purchases
-- HITL checkpoints are embedded in workflow logic, not sold as separate review functions
-- Low-confidence handling belongs inside the relevant function, not as a separate purchased tile
+Upload Documents  
+→ Intake / Setup  
+→ Project Intelligence Layer  
+→ Agent Workflows  
+→ Estimator Decisions
 
----
+Agents do the reasoning.  
+Code handles:
 
-## Phase 1 — Project Intake & Setup (Confirmed Active Direction)
+- orchestration
+- evidence preparation
+- persistence
+- trust controls
+- review controls
+- UI
+- workflow plumbing
 
-### Goal
-Provide a complete, trustworthy project setup workflow that removes manual effort required before estimating begins.
+The goal is not to give users a thousand tiny buttons.
 
-### Current Primary Workflow
-1. User creates a project
-2. User uploads construction documents
-3. System performs intake analysis
-4. System generates initial sheet setup/classification output
-5. Reports are accessed through the Purchased Functions hub
-6. Project becomes progressively more ready for downstream estimating work
-
-## Intake Engine Roadmap added 3-7-2026
-
-Phase 1
-Upload pipeline
-PDF extraction
-
-Phase 2
-Page evidence extraction
-
-Phase 3
-Document structure inference
-
-Phase 4
-Cross-sheet reasoning
-
-Phase 5
-Specification intelligence (NEXT)
-
-Phase 6
-Layout-aware extraction improvements
-
-### Current Meaningful Purchased Function
-**Intake + Sheet Setup**
-
-This combined function currently represents:
-- File intake analysis
-- PDF usability checks
-- Searchability / raster-heavy checks
-- Page count heuristics
-- Print-size detection and mixed-size warnings
-- Initial sheet record generation
-- Initial sheet classification / scale-status seed data
-- Intake report + sheet setup summary combined on the Intake page
-
-### Value Delivered
-- Prevents bad files from contaminating downstream work
-- Gives the user immediate visibility into file trustworthiness
-- Creates per-sheet structure for future review and measurement workflows
-- Establishes a report hub pattern for all later functions
-
-### Success Criteria
-A user uploads files, purchases Intake + Sheet Setup, and receives:
-- a usable intake report
-- print-size information
-- initial sheet setup output
-- a clear path back to the project report hub
+The goal is to give them a small number of meaningful workflows that feel like having capable estimating support staff already in the office.
 
 ---
 
-## Phase 1.1 — Project Report Hub (Confirmed Active Direction)
+# Product Principles
 
-### Goal
-Make the Purchased Functions panel the main place where users retrieve outputs from paid work.
+## 1 — Trust Before Automation
 
-### Current Behavior
-- Agent strip appears across the top of the project workspace
-- Purchased Functions panel is the primary focus area
-- Upload panel is secondary
-- Upload list is minimal/status-only
-- Report access is centered in Purchased Functions rather than scattered through upload rows
+MittenIQ must earn trust before it tries to impress anybody.
 
-### Why this matters
-The project workspace should feel like:
-- upload inputs go in one place
-- completed paid outputs come back to one place
+It should clearly communicate:
 
-This keeps workflow understandable and prevents the page from turning into a cluttered file browser.
+- what it knows
+- what it thinks
+- what needs review
+- where confidence is weak
 
-### Success Criteria
-A user can:
-- identify purchased functions quickly
-- open resulting reports from one obvious location
-- avoid confusion about where output lives
+The system should prefer transparent review-required behavior over fake certainty.
+
+At the same time, review behavior must be calibrated to avoid burying estimators in false-positive noise when the output is already practically useful.
 
 ---
 
-## Phase 1.2 — Drawing Organization (Confirmed Direction, Not Yet Complete)
+## 2 — AI Does the Interpretation
 
-### Goal
-Automatically organize uploaded files into a clean project structure and reduce document chaos before estimating begins.
+Construction documents vary too much for deterministic parsing logic to be the main reasoning layer.
 
-### Current intended function scope
-- Detect drawing sets
-- Detect spec manuals
-- Detect addenda
-- Detect revisions
-- Detect duplicate files
-- Detect version indicators
-- Organize project files into a clear structure
+AI is responsible for:
 
-### Design intent
-This should be sold as a meaningful standalone outcome, not broken into small sub-buttons.
+- page understanding
+- document interpretation
+- meaning extraction
+- packet identity
+- section continuity
+- document relationship reasoning
 
-### Value Delivered
-- Eliminates manual sorting work
-- Reduces estimator setup friction
-- Creates a trustworthy project organization baseline
+Code is responsible for:
 
-### Current status
-Direction confirmed. Implementation not yet complete.
+- gathering evidence
+- orchestrating the flow
+- validating output shape
+- storing results
+- controlling trust and permissions
+- supporting UI/workflow behavior
 
----
-
-## Phase 1.3 — Specification Intelligence (Confirmed Direction, Not Yet Complete)
-
-### Goal
-Turn specification manuals into structured, searchable project intelligence.
-
-### Current intended function scope
-- Identify specification sections
-- Extract division structure
-- Identify electrical and electrical-related sections
-- Extract approved manufacturers
-- Extract product requirements
-- Extract installation requirements
-- Detect substitution clauses
-- Produce summary findings
-
-### Design intent
-This should also be a meaningful standalone purchase, not a collection of tiny separate buttons.
-
-### Value Delivered
-- Makes specs easier to trust and navigate
-- Supports downstream workflows like RFQ and scope verification
-- Reduces time wasted searching manually through long manuals
-
-### Current status
-Direction confirmed. Implementation not yet complete.
+Deterministic code must not materially impede or narrow AI interpretation.
 
 ---
 
-## Phase 2 — Trust Layer & Guided Review (Planned Direction)
+## 3 — Intake Must Create Reusable Intelligence
 
-### Goal
-Improve trust in sheet-level and document-level outputs before heavy estimating workflows begin.
+The first pass over the file should not be wasted on a one-off report.
 
-### Planned areas
-- Better sheet classification
-- Better confidence scoring
-- Better scale-readiness logic
-- Better plain-English explanations for uncertainty
-- More meaningful HITL checkpoints embedded at critical workflow points
+Expensive work done during intake should create reusable project intelligence for later workflows.
 
-### Important design rule
-Human verification should be embedded where needed. It should not feel like the user is paying simply to “look at things.”
+That includes reusing:
 
-### Current known gap
-Current sheet confidence logic is still v0/simple and needs a more real foundation.
-
----
-
-## Phase 3 — Estimating Assistance (Planned Direction)
-
-### Goal
-Begin supporting actual estimating preparation and estimating-adjacent work after trustworthy inputs are established.
-
-### Planned direction
-This phase is expected to include larger, meaningful functions rather than many tiny transactions.
-
-Likely characteristics:
-- project-aware guidance
-- organized spec support
-- trustworthy drawing context
-- downstream scope assistance
-- future estimating workflows tied to validated project setup
-
-### Current status
-Direction only. No final function breakdown should be treated as locked yet.
+- file facts
+- extracted text
+- OCR text
+- page images
+- routing results
+- page-level understanding
+- continuity outputs
+- grouped structure
+- human review outcomes
+- future relationship analysis
 
 ---
 
-## Phase 4 — RFQ / Vendor Workflow (Planned Direction)
+## 4 — Simplicity for Contractors
 
-### Goal
-Support vendor-facing workflow once spec intelligence and project structure are trustworthy.
+MittenIQ must remain:
 
-### Current intended direction
-- Read specs
-- Extract approved manufacturers
-- Match to saved vendor contacts
-- Prompt user to verify mappings
-- Generate RFQ drafts
-- Attach relevant drawings/specs
-- Require approval before send
-- Track responses
+- clean
+- obvious
+- easy to operate
+- not overloaded with technical clutter
 
-### Important note
-This is still a later workflow and should be built on top of strong intake, organization, and spec intelligence.
+Complexity belongs behind the scenes.
 
 ---
 
-## Project Workspace Design Principles (Confirmed)
+## 5 — Meaningful Agent Workflows
 
-### 1. Report hub first
-Users should feel that paid outputs return to one obvious place.
-
-### 2. Uploads stay simple
-The upload area should be easy to use, but not the center of the product experience.
-
-### 3. Telemetry stays compact
-Savings/efficiency metrics should be visible but never overpower the workflow.
-
-### 4. Simplicity over feature sprawl
-Do not explode meaningful functions into too many tiny paid interactions.
-
-### 5. Trust before automation
-MittenIQ should explain itself clearly, especially when confidence is below 100.
+Users should buy and run meaningful workflows, not a pile of tiny fragmented utilities.
 
 ---
 
-## Guiding Principle
+# Current Phase — Intake Stabilization & Spec Path First
 
-MittenIQ builds trust before automation.
+This is the current active roadmap phase.
 
-Upload → Intake/Setup → Organized understanding → Assistance → Automation
+## Goal
+
+Make intake trustworthy, predictable, and fast enough to support real contractor workflows.
+
+## Current Reality
+
+- intake runs end-to-end on real files
+- system is stable under load (with retry/backoff)
+- drawing classification is improving
+- drawing identity extraction is still weak
+- spec pathway still produces noise and is too slow
+- fast-path routing exists conceptually but is not live
+- no intake re-run capability yet
+
+## Core Focus Areas
+
+### 1. Specification Pathway (PRIMARY FOCUS)
+
+- section continuity accuracy
+- packet identity clarity
+- blank/divider detection
+- TOC/structure reconciliation (future step)
+- reduce review noise
+- prepare for fast-path routing
+
+### 2. Drawing Pathway (SECONDARY, BUT ACTIVE)
+
+Now explicitly split into two independent problems:
+
+- **classification (mostly working)**
+- **identity extraction (still weak)**
+
+Focus:
+- reliable sheet number detection
+- reliable sheet title extraction
+- correct title-block prioritization
+- avoid job number / reference confusion
+
+### 3. Speed (STRUCTURE-DRIVEN, NOT HACKED)
+
+Speed improvements will come from:
+
+- spec fast-path routing (top priority for speed)
+- reduced heavy-path usage
+- better chunk discipline
+- token budgeting (future)
+- selective OCR/image usage
+
+**Do not optimize brute-force path prematurely.**
+
+---
+
+# Immediate Development Order
+
+1. harden specification pathway
+2. introduce spec fast-path routing (structure-based)
+3. fix drawing identity extraction (not classification)
+4. improve throughput using routing, not brute force
+5. polish UI/customer experience
+
+---
+
+# Phase 1 — Intake / Setup
+
+## Goal
+
+Produce a reliable first AI pass over project documents that makes the project ready for later agent workflows.
+
+## Intake Should Produce
+
+- deterministic file-fact trust report
+- page register
+- page-level understanding
+- continuity-aware document intelligence
+- review-required signals
+- reusable project intelligence
+
+## Current Intake Pipeline
+
+upload  
+→ R2 read  
+→ PDF analysis  
+→ native text extraction  
+→ PreparedPage construction  
+→ router stage  
+→ page image generation  
+→ route-aware OCR  
+→ AI page understanding  
+→ post-AI cleanup / normalization  
+→ spec section grouping  
+→ persistence
+
+## Near-Term Additions
+
+- spec fast-path routing (bookmark/structure driven)
+- token/payload budgeting
+- improved chunking discipline
+- better drawing identity extraction
+- intake re-run capability
+
+---
+
+# Phase 1.5 — Upload & Workflow Control (NEW)
+
+## Goal
+
+Improve usability and iteration speed during intake development and early user testing.
+
+## Recently Completed
+
+- upload deletion (DB + R2)
+- safe delete guard while processing
+
+## Next Additions
+
+- re-run intake without re-upload
+- optional “force delete / cancel” (later, not immediate)
+- better processing/delay visibility in UI (later)
+
+---
+
+# Phase 2 — Project Organization
+
+## Goal
+
+Automatically organize project documents into a cleaner structure.
+
+Depends on strong intake.
+
+---
+
+# Phase 3 — Specification Intelligence
+
+## Goal
+
+Turn spec books into structured, estimator-usable intelligence.
+
+Depends heavily on spec pathway quality.
+
+---
+
+# Phase 4 — Drawing Intelligence
+
+## Goal
+
+Use intake foundation to support drawing-based workflows.
+
+Now explicitly depends on:
+
+- correct classification (mostly solved)
+- correct identity extraction (not solved yet)
+
+---
+
+# Phase 5 — Estimating Assistant
+
+## Goal
+
+Provide real estimating preparation workflows.
+
+Examples:
+
+- scope summaries
+- risk surfacing
+- bid preparation support
+
+---
+
+# Phase 6 — Higher-Level Estimating Agents
+
+## Goal
+
+Cross-document reasoning and higher-level estimating intelligence.
+
+---
+
+# RFQ / Vendor Workflow Direction
+
+Future phase after reliable spec intelligence:
+
+- manufacturer extraction
+- vendor matching
+- RFQ drafting
+- response tracking
+
+---
+
+# Workspace Direction
+
+## Report Hub First
+Outputs remain centralized.
+
+## Upload Simplicity
+Uploading must stay easy.
+
+## Clean UI
+No cluttered file-manager feel.
+
+## Subtle Telemetry
+Helpful, not intrusive.
+
+---
+
+# Long-Term Vision
+
+MittenIQ becomes a system where contractors can:
+
+- drop in project documents
+- get organized, trustworthy intelligence
+- run estimating workflows without re-reading everything
+
+It should feel:
+
+- organized
+- trustworthy
+- fast enough
+- practical
+- useful for real work
+
+---
+
+# Product Model Summary
+
+Upload  
+→ Intake / Setup  
+→ Project Intelligence  
+→ Agent Workflows  
+→ Estimator Decisions
