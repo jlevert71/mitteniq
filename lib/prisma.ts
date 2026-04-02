@@ -1,10 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const connectionString = process.env.DIRECT_DATABASE_URL;
+const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-  throw new Error("Missing DIRECT_DATABASE_URL in environment");
+  throw new Error("Missing DATABASE_URL in environment");
 }
 
 const adapter = new PrismaPg({ connectionString });
