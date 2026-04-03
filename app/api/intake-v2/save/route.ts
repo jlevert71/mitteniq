@@ -1,8 +1,31 @@
 import { NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 import { requireUserId } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
 export const runtime = "nodejs"
+
+function sanitizeForPostgres(obj: unknown): unknown {
+  if (typeof obj === "string") {
+    // Remove null bytes and other control characters Postgres rejects in JSON
+    return obj
+      .replace(/\u0000/g, "")
+      .replace(/\\u0000/g, "")
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeForPostgres)
+  }
+  if (obj !== null && typeof obj === "object") {
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>).map(([k, v]) => [
+        k,
+        sanitizeForPostgres(v),
+      ])
+    )
+  }
+  return obj
+}
 
 export async function POST(req: Request) {
   try {
@@ -26,10 +49,15 @@ export async function POST(req: Request) {
 
     const existing = (upload.intakeReport ?? {}) as Record<string, unknown>
 
+    const sanitizedResult = sanitizeForPostgres(result)
+    const sanitizedExisting = sanitizeForPostgres(existing)
     await prisma.upload.update({
       where: { id: uploadId },
       data: {
-        intakeReport: { ...existing, v2: result },
+        intakeReport: {
+          ...(sanitizedExisting as Record<string, unknown>),
+          v2: sanitizedResult,
+        } as Prisma.InputJsonValue,
       },
     })
 
