@@ -11,7 +11,315 @@ Claude is the technical partner. Jim is the domain expert.
 Cursor prompt format: always deliver as a single fenced code block — one tile, one copy button.
 
 ## What MittenIQ Is
+AI-assisted estimating p# MittenIQ — Claude Resume Context
+Last Updated: 2026-04-01 (session 5 — production deployment, R2 CORS, DB pooler fix, division names, intake caching)
+
+## Who I Am
+Jim — electrical estimator/PM with 31 years in the trade, 22 as estimator.
+Currently estimator/PM at a small/mid-sized electrical contractor in Mid Michigan.
+Founder and sole builder of MittenIQ.
+Primary tools: Claude (architecture/guidance), Cursor (code generation), ChatGPT (second opinion).
+Important: Jim is not a software developer. All instructions must be step-by-step and plain English.
+Claude is the technical partner. Jim is the domain expert.
+Cursor prompt format: always deliver as a single fenced code block — one tile, one copy button.
+
+## What MittenIQ Is
 AI-assisted estimating platform for electrical contractors specifically.
+Long-term vision: estimating, project management, payroll, AP/AR, fleet management.
+Current focus: estimating only.
+
+Agent architecture models real estimating department roles:
+- Estimating Assistant
+- Junior Estimator
+- Senior Estimator
+- Chief Estimator
+
+Domain framing uses CSI divisions — primarily 26, 27, 28.
+
+## Tech Stack
+- Next.js 16, React 19, TypeScript, Tailwind
+- Prisma 7 + pg adapter
+- Supabase (Postgres)
+- Cloudflare R2 (file storage)
+- Vercel (hosting)
+- OpenAI gpt-4o-mini via Chat Completions
+- pdf-parse, pdfjs-dist 5.4.296, @napi-rs/canvas 0.1.65
+- tesseract.js (present but avoid using)
+
+## Codebase Structure (top level)
+- `lib/intake/` — V1 intake, 29 modules, frozen. DO NOT modify anything here.
+- `lib/intake_v2/` — V2 intake, now 5 modules including TOC parser.
+- `lib/agents/` — Agent layer, actively being built.
+- `app/api/` — API routes (intake, uploads, projects, agents)
+- `app/projects/[projectId]/` — Project pages including intake UI
+- `app/projects/[projectId]/intake/IntakeClient.tsx` — Main intake page (this is the active one)
+- `app/intake/` — OLD V1 intake page, still exists but being phased out
+- `prisma/schema.prisma` — DB schema (User, Project, Upload, Sheet, PreBidChecklist, PreBidChecklistAllowanceItem models)
+- `components/agents/` — Agent UI components
+- `public/pdf.worker.min.js` — pdfjs worker (copied from node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs)
+
+## Core Architectural Decisions Made
+1. V1 intake is frozen. Do not touch it.
+2. V1 intake is gated behind MITTENIQ_V1_INTAKE_ENABLED=false in .env.local.
+   Uploads now complete in ~1 second regardless of file size.
+3. V2 philosophy: deterministic scorer first, AI only for fallback, fail loud not smart.
+4. Intake job is: PDF health check + page count + print sizes + rough classification.
+   Page-by-page sheet number/title extraction is deferred — not blocking agent work.
+5. Speed is critical. Target: under 90 seconds even for 900+ page documents.
+6. No registry systems, no reconciliation layers, no multi-layer confidence scoring in V2.
+7. AI tier = text-based for digital PDFs. Vision only for scanned pages, async, never blocking.
+8. Pre-bid checklist agent uses progressive scan — starts at 60 pages, doubles each pass.
+   Beyond page 60: keyword scan only, matched pages appended to base 60 — never bulk text.
+   Per-page character limit is dynamic based on document size to balance speed vs completeness.
+9. The product vision: upload a spec book, get your J. Ranck bid summary sheet filled out
+   automatically in seconds. Estimator reviews and corrects. That's the core value.
+10. Active intake page is app/projects/[projectId]/intake/ — NOT app/intake/ (old V1 page)
+11. Warranty requirements belong in the Division 26 scope review agent, not the pre-bid checklist.
+12. MittenIQ is built specifically for electrical contractors — domain knowledge is baked in,
+    not generic. Every feature should reflect how an electrical estimator actually works.
+13. preBidMandatory uses a deterministic fallback: if preBidHeld=true and no mandatory language
+    found in first 60 pages, default to false. "Encouraged" always means discretionary.
+14. Special insurance only triggers for non-standard coverages — standard GL/Auto/WC never trigger it.
+15. DBE only triggers when explicit participation goals or Good Faith Effort documentation required.
+    Diversity disclosure forms and certification tables do NOT trigger it.
+16. MDOT 2020 Standard Specifications reference triggers buyAmerican=true — FHWA Buy America
+    is incorporated by reference into all MDOT standard spec projects. The deterministic rule
+    matches on full governing phrases only (e.g. "2020 standard specifications for construction
+    shall govern") — never on incidental MDOT material spec references or the word "American"
+    appearing in organization names like NSPE, ACEC, ASCE.
+17. breakDownsRequired=true when the bid form requires pricing broken into separate named
+    divisions or sections each with their own subtotal. This is an estimator setup flag —
+    it tells the estimator to mirror the bid form structure before starting takeoff.
+    Deterministic post-processing rule fires on "total division i/ii" language in addition
+    to AI extraction.
+18. TOC parser is deterministic — no AI. Finds section numbers, resolves PDF page numbers via
+    body text scan. Null for any unresolved page — never guesses.
+19. MDOT proposals have no TOC — TOC parser correctly returns zero entries for these docs.
+    When zero Division 26 entries + MDOT 2020 governing phrase detected, display static note
+    directing estimator to Section 812 of MDOT Standard Specs.
+20. /api/uploads/[uploadId]/file returns JSON { ok, url, page } when ?page= param is present.
+    Returns redirect (no #page) when no param — existing file-open links unaffected.
+    PDF page jumping is handled client-side via the inline pdfjs canvas viewer.
+    Browser native PDF viewers ignore #page= fragments on redirected/presigned URLs —
+    the inline viewer is the only reliable solution.
+21. Runtime DB connection uses DATABASE_URL (pooler, port 6543) via PrismaPg adapter in lib/prisma.ts.
+    DIRECT_DATABASE_URL is used only by Prisma CLI/migrations via prisma.config.ts.
+    Vercel serverless cannot use direct connections — pooler is required.
+22. V2 intake result is saved to Upload.intakeReport.v2 (JSON field) after first run.
+    On return visits, cached result is loaded instantly — no re-run needed.
+    Save route: POST /api/intake-v2/save. Sanitizes Unicode before writing to Postgres.
+
+## Full App Status (as of 2026-04-01)
+
+### Public Marketing Site — mitteniq.com — LIVE AND WORKING
+- Landing page live with tagline, feature overview, and waitlist signup form
+- Waitlist form fully wired: captures name, email, company, notes
+  Sends confirmation email to the person who signed up + notification email to Jim
+- Pricing section: $149/month standard, $49 lifetime founding member (limited spots)
+- Projected annual savings table across small/medium/large contractor tiers
+- How it works section (3 steps), FAQ section, footer nav
+- Menu, Log in, and Join Waitlist buttons in top nav
+
+### Auth — WORKING IN PRODUCTION
+- Login page at /login — email + password, session cookie (mitten-auth)
+- Cookie set with secure: true (required for production HTTPS)
+- "First time? Set up your account" link on login page
+- requireUserId() auth guard used across all API routes
+
+### Projects Dashboard — /projects — WORKING IN PRODUCTION
+- Lists all projects with upload count per project
+- Create Project modal — name it or leave blank for auto-name
+- Delete Project with confirmation modal
+
+### Project Page — /projects/[projectId] — WORKING IN PRODUCTION
+- Project name + "Project workspace" subheader
+- Project efficiency bar: Time saved / Manual cost / MittenIQ cost / Savings
+- Four agent tiles: Estimating Assistant, Junior Estimator, Senior Estimator, Chief Estimator
+- Purchased functions panel with intake report links
+- Upload drawings/specs panel — drag and drop PDF upload zone
+
+### Intake Page — /projects/[projectId]/intake?uploadId=[id] — WORKING IN PRODUCTION
+- File status bar: filename, Upload status, Intake status, Stage, Page count badges
+- Intake Report section — fully wired with V2 data
+- Inline PDF Viewer panel — between intake report and pre-bid checklist
+- Pre-Bid Checklist section — full agent UI embedded below PDF viewer
+- Back to Project link and Refresh button in header
+
+### Intake Report (embedded in intake page) — COMPLETE
+Three sub-sections, fetched from GET /api/intake-v2/test?uploadId=:
+Result cached in Upload.intakeReport.v2 after first run — loads instantly on return visits.
+
+**File Health**
+- Green checkmark or Red X with error message
+
+**Page Summary**
+- Total page count
+- Table: Size | Type | Pages, sorted by count descending
+- Label rule: 8.5×11 or 11×8.5 = Specifications, all other sizes = Drawings
+
+**Specification Section Index**
+- Grouped by CSI division, sorted numerically (null/other at end)
+- All divisions start collapsed by default
+- Division headers are collapsible toggle buttons with ▶/▼ chevron
+- Expand All / Collapse All button
+- Section links (blue) open inline PDF viewer at correct page when pdfPageNumber resolved
+- Plain text (no link) when pdfPageNumber is null
+
+### Inline PDF Viewer (embedded in intake page) — COMPLETE
+- pdfjs-dist only — no new packages
+- Worker: public/pdf.worker.min.js
+- Dynamic import: import("pdfjs-dist/legacy/build/pdf.mjs")
+- RenderParameters: { canvasContext, canvas, viewport } — canvas required in pdfjs 5.4
+- Prev/Next navigation, page counter, Close button
+
+### Pre-Bid Checklist (embedded in intake page) — COMPLETE
+- Run Pre-Bid Checklist button triggers full agent scan
+- Auto-saves and loads on return — no re-run needed
+- Full checklist output in 6 labeled sections with editable fields
+
+## What's Built and Working
+
+### Infrastructure
+- Auth (session cookie with secure:true, requireUserId)
+- Projects CRUD
+- PDF upload to R2 (presign → browser PUT → complete → analyze) — ~1 second
+- Intake V1 pipeline (frozen, disabled by env var)
+- Intake V2 pipeline: buffer → text extraction → page dimensions → simple line scorer → TOC parse → result
+- V2 route: GET /api/intake-v2/test?uploadId= and POST with file upload
+- V2 cache: POST /api/intake-v2/save — saves result to Upload.intakeReport.v2
+- Project page UI with agent workspace, file uploads, intake links
+
+### Production Infrastructure (Vercel + Supabase + R2) — ALL FIXED
+- Login working on mitteniq.com (was: missing secure cookie flag, wrong DB URL)
+- Uploads working on mitteniq.com (was: R2 CORS missing mitteniq.com, wrong R2 keys)
+- Intake report working on mitteniq.com (was: R2 keys wrong, DATABASE_URL missing)
+- Vercel env vars now complete: DATABASE_URL, DIRECT_DATABASE_URL, OPENAI_API_KEY,
+  MITTENIQ_V1_INTAKE_ENABLED, all R2 vars, RESEND vars, LEAD emails
+- R2 CORS policy: allows mitteniq.com + localhost:3000, methods GET/PUT/POST/DELETE/HEAD
+- lib/prisma.ts uses DATABASE_URL (pooler) at runtime — direct connection not reachable from Vercel serverless
+- Supabase direct connection (db.*.supabase.co) only works for local dev and migrations
+
+### Critical Fix — pdf-text-extraction.ts
+`cleanText()` fixed to preserve newlines: `.replace(/[^\S\n]+/g, " ")`
+
+### Page Dimension Extraction — BUILT, WORKING
+- pdfjs-dist extracts viewport per page, converts points→inches, stores on IntakeV2PageTextInput
+- pageSizes summary on IntakeV2RunResult, labeled Specifications/Drawings
+
+### TOC Parser — BUILT, TESTED, WORKING
+Located in: lib/intake_v2/parse-toc.ts
+Supports Fishbeck, C2AE/Tawas, Wade Trim, ITB, GFA formats.
+Performance: Fishbeck 946pp → 154 entries, 153 resolved, 18ms.
+Known gap: bare section number headers (no SECTION keyword) return null — roadmap.
+
+### CSI Division Names — COMPLETE
+Full division name map in IntakeClient.tsx including:
+- Division 0: Bidding and Contracting Requirements
+- Divisions 1-28 (standard CSI)
+- Division 31: Earthwork
+- Division 32: Exterior Improvements
+- Division 33: Utilities
+- Division 40: Process Integration
+- Division 43: Process Gas Handling
+- Division 44: Pollution Control
+- Division 46: Water and Wastewater Equipment
+
+### V2 Intake Result Caching — BUILT, WORKING (dev only — pending production deploy)
+- POST /api/intake-v2/save — saves sanitized result to Upload.intakeReport.v2
+- IntakeClient.tsx checks meta.intakeReport?.v2 on load — uses cache if present
+- sanitizeForPostgres() strips null bytes and control chars before DB write
+- Uses buildIntakeV2ClientPayload() helper to normalize raw/cached data identically
+
+### Pre-Bid Checklist Agent — COMPLETE, BATTLE-TESTED, PRODUCTION-READY
+(see previous context for full details — unchanged)
+
+### DB Schema
+- PreBidChecklist + PreBidChecklistAllowanceItem models
+- Upload.intakeReport (Json) used to cache V2 result under .v2 key
+- Migrations applied through 20260324212755_add_project_name_to_pre_bid_checklist
+
+## Known Issues / Open Problems
+- IntakeClient.tsx currently on main has working base version but is MISSING:
+  - buildIntakeV2ClientPayload helper function
+  - V2 caching logic (check meta.intakeReport?.v2 before fetching)
+  - POST to /api/intake-v2/save after fresh fetch
+  - Updated CSI_DIVISION_NAMES (Division 0, 31-33, 40, 43-44, 46)
+  All four of these need to be added back via Cursor in next session.
+  The save route (app/api/intake-v2/save/route.ts) IS on main and working.
+- Progress messages show all at once after scan completes — streaming is deferred
+- Old app/intake/ page still exists — needs to be retired or redirected
+- Project page navigation is clunky — intake links should surface directly
+- Background job architecture needed — scan abandoned if user leaves page mid-run
+- qualificationsRequired field added to types/extract but not yet in DB schema or save logic
+- dbeSbeGoalPercent field added to types/extract/UI but not yet in DB schema or save logic
+- buyAmerican false positive on EJCDC format docs — AI prompt needs explicit exclusion
+  of NSPE/ACEC/ASCE org name matches
+- TOC PDF page resolution only works for SECTION keyword headers — C2AE/Tawas deferred
+
+## Next Session Priorities (in order)
+1. Add back to IntakeClient.tsx (all four in one Cursor prompt):
+   a. buildIntakeV2ClientPayload helper
+   b. V2 cache check (meta.intakeReport?.v2) before fetching
+   c. POST to /api/intake-v2/save after fresh fetch
+   d. Updated CSI_DIVISION_NAMES with Division 0 and Divisions 31-46
+2. Fix buyAmerican AI false positive — NSPE/ACEC/ASCE exclusion in extract-checklist-fields.ts
+3. Add qualificationsRequired and dbeSbeGoalPercent to DB schema and save logic
+4. Improve TOC PDF page resolution for bare section number headers
+5. Print view — clean bid summary sheet, printable/PDF export
+6. Streaming progress — real-time pass messages
+7. Clean up project page navigation
+8. Retire old app/intake/ page
+9. Background job architecture
+10. Division 26 scope review agent
+
+## Decisions Still Pending
+- [ ] Prime vs. sub role path — biddingAs field per project
+- [ ] Retire or redirect old app/intake/ page
+- [ ] V2 scorer fixes (deferred)
+- [ ] AI fallback tier for V2 (deferred)
+- [ ] Real-time streaming progress via SSE
+- [ ] TOC PDF page resolution improvement
+- [ ] MDOT Electrical Agent (roadmap)
+- [ ] Bid form agent (low priority, far roadmap)
+
+## Production Infrastructure Notes (for future reference)
+- Vercel production branch: main
+- Vercel deploys automatically on push to main
+- To deploy: git checkout main → git merge [branch] → git push
+- Merge conflicts in IntakeClient.tsx caused major issues today — always use
+  "Accept Current Change" in VS Code merge editor, never "Complete with Conflicts"
+- If merge goes wrong: git merge --abort, then use git show [commit]:path > file to
+  extract a specific file from a specific commit
+- git show 8a948e4:app/projects/[projectId]/intake/IntakeClient.tsx is the last known
+  good version WITH caching but WITHOUT the full division names fix
+
+## Rules Claude Must Always Follow For This Project
+1. Do not modify lib/intake/ — it is frozen V1
+2. Do not add registry, reconciliation, or multi-layer confidence systems
+3. Do not use vision API for digital PDFs — text extraction only
+4. Speed over completeness — flag unknowns, never block on them
+5. Fail loud (explicit nulls) not smart (bad guesses)
+6. One file, one responsibility
+7. No `any` types
+8. Surgical fixes only — never refactor working code while fixing something else
+9. Always give Jim Cursor prompts for code changes, never raw code to edit manually
+10. Cursor prompts must always be a single fenced code block — one tile, one copy button.
+    Never split instructions and code across multiple blocks.
+11. Always explain what we are doing and why in plain English before giving Cursor prompts
+12. MittenIQ is for electrical contractors specifically — all domain decisions must reflect
+    how an electrical estimator/subcontractor actually works in the field
+
+## How To Use This File
+Paste this file + V2_ARCHITECTURE.md at the start of each new Claude conversation.
+Then say "here's where we left off" in one sentence.
+Claude will have everything needed to pick up mid-stride.
+
+Update this file at the end of every work session:
+- Move completed items to "Built and Working"
+- Update "Next Session Priorities"
+- Add new known issues
+- Add new decisions made
+latform for electrical contractors specifically.
 Long-term vision: estimating, project management, payroll, AP/AR, fleet management.
 Current focus: estimating only.
 

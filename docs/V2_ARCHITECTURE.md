@@ -261,7 +261,183 @@ This is post-Division 26 agent in priority.
 
 ## What's Deferred
 - Real-time streaming progress via SSE — progress shows post-scan for now
-- Background job architecture — scan abandoned if user leaves page
+- Background job architecture — scan abandoned if use# MittenIQ V2 Architecture
+Last Updated: 2026-04-01 (session 5 — production deployment, R2 CORS, DB pooler fix, division names, intake caching)
+
+## The Philosophy (Why V2 Exists)
+V1 tried to be too smart. It built registries, reconciliation layers,
+multi-layer AI passes, and confidence scoring systems. It took an hour
+to process a file and still got things wrong. V2 starts over with a
+simpler approach: do less, do it fast, be honest about what you don't know.
+
+## The Three Layers
+
+### Layer 1 — Upload
+- User uploads PDF to Cloudflare R2
+- Completes in ~1 second regardless of file size
+- No processing at upload time
+- V1 intake is disabled (MITTENIQ_V1_INTAKE_ENABLED=false)
+
+### Layer 2 — Intake (V2)
+Located in: lib/intake_v2/
+- PDF health check: is it readable, searchable, or scanned?
+- Page count and print sizes
+- Rough page classification (drawing vs spec vs front-end)
+- Simple line scorer for sheet numbers and titles
+- TOC parser — section index with PDF page resolution
+- Page dimension extraction — size and type classification per page
+- No AI, no registry, no reconciliation
+- Target: under 5 seconds
+
+#### Critical Fix — lib/intake/pdf-text-extraction.ts
+`cleanText()` was collapsing ALL whitespace including newlines into a single space.
+Fixed: `.replace(/[^\S\n]+/g, " ")` — collapses spaces/tabs only, preserves newlines.
+
+#### Page Dimension Extraction — BUILT, WORKING
+pdfjs-dist extracts viewport dimensions for each page alongside text extraction.
+Each page: view array [x, y, w, h] in points ÷ 72 = inches, rounded to 1 decimal.
+Stored as pageDimensions: { widthIn, heightIn } | null on IntakeV2PageTextInput.
+pageSizes summary on IntakeV2RunResult: grouped by unique size, labeled, sorted by count desc.
+Label rule: 8.5×11 or 11×8.5 → "Specifications", all other sizes → "Drawings".
+
+#### TOC Parser — BUILT, TESTED, WORKING
+Located in: lib/intake_v2/parse-toc.ts
+Called from: lib/intake_v2/run-intake-v2.ts
+Types in: lib/intake_v2/types.ts (TocEntry, TocParseResult)
+
+Supports all real-world TOC formats found in Michigan construction docs:
+- Format A: section number + spaces/dash + title, no page refs (Fishbeck, C2AE/Tawas, ITB)
+- Format B: title + dot leaders + page ref (Wade Trim/Lake Mitchell)
+- Multi-page TOC: follows TOC across consecutive pages once header detected
+- No TOC: MDOT proposals correctly return zero entries
+
+Section number formats: CSI 8-digit, 2+4, decimal subdivisions, legacy 5-digit, GFA alphanumeric.
+
+PDF page resolution: scans body text for "SECTION XX XX XX" headers near top of each page.
+Stores null for any unresolved page — never guesses.
+
+Known gaps:
+- Resolution only works when body headers use "SECTION" keyword.
+- Pre-printed EJCDC forms also return null — correct behavior.
+
+Performance: Fishbeck 946pp → 154 entries, 153 resolved, 18ms.
+
+#### Intake Report UI — BUILT, WORKING
+Rendered in: app/projects/[projectId]/intake/IntakeClient.tsx
+Data source: GET /api/intake-v2/test?uploadId= (first run) or Upload.intakeReport.v2 (cached)
+
+Three sub-sections:
+1. File Health — ok/error status
+2. Page Summary — total pages + size table (Size | Type | Pages)
+3. Specification Section Index — collapsible by CSI division, starts fully collapsed,
+   Expand All / Collapse All button, section links open inline PDF viewer
+
+CSI Division names map includes Divisions 0, 1-28, 31, 32, 33, 40, 43, 44, 46.
+
+NOTE: As of end of session 5, IntakeClient.tsx on main is missing the caching logic,
+buildIntakeV2ClientPayload helper, and the updated division names. These need to be
+re-added via Cursor at the start of next session (Priority #1).
+
+#### V2 Intake Result Caching — BUILT, WORKING (dev only pending next session)
+Save route: POST /api/intake-v2/save (app/api/intake-v2/save/route.ts) — ON MAIN, WORKING
+- Sanitizes result with sanitizeForPostgres() before writing
+- Merges into existing Upload.intakeReport JSON under .v2 key
+- Uses Prisma.InputJsonValue cast for type safety
+
+Client-side cache check (NEEDS TO BE RE-ADDED TO IntakeClient.tsx):
+- Check meta.intakeReport?.v2 before fetching /api/intake-v2/test
+- Use buildIntakeV2ClientPayload() to normalize both cached and fresh data
+- POST to /api/intake-v2/save after fresh fetch (best-effort, errors ignored)
+
+#### Inline PDF Viewer — BUILT, WORKING
+Rendered in: app/projects/[projectId]/intake/IntakeClient.tsx
+
+- pdfjs-dist only — no new packages
+- Worker: public/pdf.worker.min.js (copied from node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs)
+- Dynamic import: import("pdfjs-dist/legacy/build/pdf.mjs") — .mjs for TS resolution
+- RenderParameters: { canvasContext, canvas, viewport } — canvas required in pdfjs 5.4
+- Page jump flow: click section → fetch /api/uploads/[id]/file?page=N → JSON → render canvas
+- Prev/Next navigation, page counter, Close button
+- /api/uploads/[uploadId]/file: ?page= → JSON, no ?page= → redirect (unchanged)
+
+### Layer 3 — Agents
+Located in: lib/agents/
+Each agent is a focused tool that does one job well.
+Agents are stateless — one document in, one result out.
+AI handles exceptions, not the primary path.
+Human review is a feature, not a failure.
+
+#### Pre-Bid Checklist Agent (BUILT, TESTED, PRODUCTION-READY)
+Located in: lib/agents/pre-bid-checklist/
+
+Purpose: Extract all critical bid requirements from spec book front-end documents.
+Replaces 30-60 minutes of manual review per spec book.
+
+Architecture:
+- Progressive scan: pages 1-60 base, doubles each pass (60→120→240→480→full)
+- Beyond page 60: keyword scan only — matched pages appended to base text
+- Dynamic per-page char limit: ≤100pp: 10k | ≤300pp: 8k | ≤600pp: 8k | 600+: 5k
+- Total payload cap: 350,000 chars
+- Up to 5 passes — exhausts full document if needed
+- Merge: only overwrites null fields
+- Deterministic post-processing: preBidMandatory fallback, MDOT 2020 buyAmerican,
+  breakDownsRequired division subtotal detection, proposedStartDate "Upon Award" default
+- Auto-save (upsert), load on return
+
+Tested against 9 real Michigan spec books. Production-ready.
+
+Known AI accuracy issue:
+- buyAmerican false positive on EJCDC docs — NSPE/ACEC/ASCE copyright notice
+  contains "American". Deterministic rule tightened but AI prompt still needs fix.
+  Next session priority #2.
+
+#### Division 26 Scope Review Agent (PLANNED — NEXT MAJOR FEATURE)
+Located in: lib/agents/division-26-scope-review/ (not yet created)
+
+Uses TOC parser output to navigate directly to Division 26 sections.
+Planned: warranty extraction, scope items, exclusions, RFQ language generation.
+
+#### MDOT Electrical Agent (PLANNED — ROADMAP)
+Located in: lib/agents/mdot-electrical/ (not yet created)
+
+Trigger: zero Division 26 TOC entries + MDOT 2020 governing phrase.
+Planned: parse Schedule of Items pay items, cross-reference MDOT 2020 Standard Specs.
+
+## Production Infrastructure (Vercel)
+- Production branch: main — auto-deploys on push
+- Runtime DB: DATABASE_URL (Supabase transaction pooler, port 6543) via PrismaPg in lib/prisma.ts
+- Migrations DB: DIRECT_DATABASE_URL (Supabase direct) via prisma.config.ts — CLI only
+- Vercel serverless cannot reach direct Supabase connection — pooler required at runtime
+- R2 CORS: mitteniq.com + localhost:3000, all methods
+- All env vars synced to Vercel via .env.local import on 2026-04-01
+
+## Key Architectural Rules
+1. Agents are stateless — one document in, one result out
+2. No document-wide intelligence in intake — that belongs in agents
+3. Speed over completeness — null is better than a wrong answer
+4. AI handles exceptions, not the primary path
+5. Human review is a feature, not a failure
+6. Fail loud (explicit nulls) not smart (bad guesses)
+7. Keyword scan controls deep page access — never bulk-send full documents
+8. Deterministic rules take precedence over AI interpretation where possible
+9. Deterministic rules must match on specific governing phrases only
+
+## File Naming Convention
+- lib/intake_v2/ — intake pipeline files
+- lib/agents/[agent-name]/ — one folder per agent
+  - types.ts, extract-[thing].ts, run-[agent-name].ts, save-[thing].ts
+- app/api/agents/[agent-name]/route.ts — API endpoint (GET + POST)
+- components/agents/[ComponentName].tsx — UI component
+
+## What's Deferred
+- Real-time streaming progress via SSE
+- Background job architecture
+- Prime vs. sub role path
+- Vision API for scanned pages
+- Bid form agent (low priority)
+- V2 scorer fixes (pure numeric sheet numbers, page stamp prefix)
+- TOC PDF page resolution improvement (bare section number headers)
+r leaves page
 - Prime vs. sub role path — biddingAs field per project
 - Vision API for scanned pages — deferred, text-only for now
 - Bid form agent — deeper bid form structure interpretation (low priority, far roadmap)

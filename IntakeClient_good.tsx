@@ -100,35 +100,6 @@ const CSI_DIVISION_NAMES: Record<number, string> = {
   46: "Water and Wastewater Equipment",
 }
 
-function buildIntakeV2ClientPayload(raw: Record<string, unknown>): IntakeV2ClientPayload {
-  const pageSizesRaw = raw.pageSizes
-  const pageSizes: IntakeV2PageSizeRow[] = Array.isArray(pageSizesRaw)
-    ? pageSizesRaw
-        .map((row) => {
-          if (!row || typeof row !== "object") return null
-          const r = row as Record<string, unknown>
-          const widthIn = Number(r.widthIn)
-          const heightIn = Number(r.heightIn)
-          const count = Number(r.count)
-          const label = r.label === "Specifications" ? "Specifications" : "Drawings"
-          if (!Number.isFinite(widthIn) || !Number.isFinite(heightIn) || !Number.isFinite(count))
-            return null
-          return { widthIn, heightIn, label, count } as IntakeV2PageSizeRow
-        })
-        .filter(Boolean) as IntakeV2PageSizeRow[]
-    : []
-  return {
-    ok: raw.ok === true,
-    error: typeof raw.error === "string" ? raw.error : undefined,
-    pageCount:
-      typeof raw.pageCount === "number" && Number.isFinite(raw.pageCount)
-        ? raw.pageCount
-        : 0,
-    pageSizes,
-    toc: normalizeIntakeV2Toc(raw.toc),
-  }
-}
-
 function emptyIntakeV2Toc(): IntakeV2TocPayload {
   return {
     ok: false,
@@ -174,6 +145,31 @@ function normalizeIntakeV2Toc(raw: unknown): IntakeV2TocPayload {
     technicalEntriesFound: typeof o.technicalEntriesFound === "number" ? o.technicalEntriesFound : 0,
     resolvedCount: typeof o.resolvedCount === "number" ? o.resolvedCount : 0,
     durationMs: typeof o.durationMs === "number" ? o.durationMs : 0,
+  }
+}
+
+function buildIntakeV2ClientPayload(raw: Record<string, unknown>): IntakeV2ClientPayload {
+  const pageSizesRaw = raw.pageSizes
+  const pageSizes: IntakeV2PageSizeRow[] = Array.isArray(pageSizesRaw)
+    ? pageSizesRaw
+        .map((row) => {
+          if (!row || typeof row !== "object") return null
+          const r = row as Record<string, unknown>
+          const widthIn = Number(r.widthIn)
+          const heightIn = Number(r.heightIn)
+          const count = Number(r.count)
+          const label = r.label === "Specifications" ? "Specifications" : "Drawings"
+          if (!Number.isFinite(widthIn) || !Number.isFinite(heightIn) || !Number.isFinite(count)) return null
+          return { widthIn, heightIn, label, count }
+        })
+        .filter(Boolean) as IntakeV2PageSizeRow[]
+    : []
+  return {
+    ok: raw.ok === true,
+    error: typeof raw.error === "string" ? raw.error : undefined,
+    pageCount: typeof raw.pageCount === "number" && Number.isFinite(raw.pageCount) ? raw.pageCount : 0,
+    pageSizes,
+    toc: normalizeIntakeV2Toc(raw.toc),
   }
 }
 
@@ -374,18 +370,24 @@ export default function IntakeClient({ projectId, uploadId }: { projectId: strin
   useEffect(() => {
     if (!meta || meta.id !== uploadId) return
     const ac = new AbortController()
+
+    const v2cached = meta.intakeReport?.v2
+    if (
+      v2cached &&
+      typeof v2cached === "object" &&
+      v2cached !== null &&
+      !Array.isArray(v2cached)
+    ) {
+      setIntakeV2Loading(true)
+      setIntakeV2(buildIntakeV2ClientPayload(v2cached as Record<string, unknown>))
+      setIntakeV2Loading(false)
+      return
+    }
+
     setIntakeV2Loading(true)
     setIntakeV2(null)
     ;(async () => {
       try {
-        // Check for cached result first — avoids a full re-run on return visits
-        const cached = (meta.intakeReport as Record<string, unknown> | null)?.v2
-        if (cached && typeof cached === "object") {
-          setIntakeV2(buildIntakeV2ClientPayload(cached as Record<string, unknown>))
-          if (!ac.signal.aborted) setIntakeV2Loading(false)
-          return
-        }
-
         const res = await fetch(
           `/api/intake-v2/test?uploadId=${encodeURIComponent(uploadId)}`,
           { cache: "no-store", signal: ac.signal }
@@ -404,15 +406,17 @@ export default function IntakeClient({ projectId, uploadId }: { projectId: strin
           })
           return
         }
-
         setIntakeV2(buildIntakeV2ClientPayload(raw))
-
-        // Best-effort save — errors are silently ignored so they never break the UI
-        fetch("/api/intake-v2/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ uploadId, result: raw }),
-        }).catch(() => {})
+        try {
+          await fetch("/api/intake-v2/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ uploadId, result: raw }),
+            signal: ac.signal,
+          })
+        } catch {
+          /* persist best-effort */
+        }
       } catch (e) {
         if (ac.signal.aborted) return
         const errMsg = e instanceof Error ? e.message : "Failed to load intake report"
