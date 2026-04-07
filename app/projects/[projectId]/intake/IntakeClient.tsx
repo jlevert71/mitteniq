@@ -265,6 +265,7 @@ export default function IntakeClient({ projectId, uploadId }: { projectId: strin
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfError, setPdfError] = useState<string | null>(null)
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null)
+  const [zoom, setZoom] = useState<number>(1.0)
 
   function toggleDivision(key: string) {
     setExpandedDivisions((prev) => {
@@ -454,7 +455,18 @@ export default function IntakeClient({ projectId, uploadId }: { projectId: strin
         const page = await pdf.getPage(pageNum)
         if (cancelled) return
 
-        const viewport = page.getViewport({ scale: 1.5 })
+        // Fit-to-height: calculate scale so the page fills ~700px tall on first load.
+        // After that, zoom state controls the scale.
+        const naturalViewport = page.getViewport({ scale: 1.0 })
+        const fitScale = Math.round((700 / naturalViewport.height) * 100) / 100
+        const effectiveZoom = zoom === 1.0 && pdfViewer.totalPages === 0 ? fitScale : zoom
+
+        // If this is the first render (totalPages still 0), set zoom to fitScale.
+        if (zoom === 1.0 && pdfViewer.totalPages === 0) {
+          setZoom(fitScale)
+        }
+
+        const viewport = page.getViewport({ scale: effectiveZoom })
         canvas.width = viewport.width
         canvas.height = viewport.height
 
@@ -468,7 +480,7 @@ export default function IntakeClient({ projectId, uploadId }: { projectId: strin
     return () => {
       cancelled = true
     }
-  }, [pdfViewer])
+  }, [pdfViewer, zoom])
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-8">
@@ -718,7 +730,7 @@ export default function IntakeClient({ projectId, uploadId }: { projectId: strin
 
           {pdfViewer && !pdfLoading && !pdfError && (
             <div className="space-y-3">
-              <div className="flex items-center gap-3 text-xs text-white/60">
+              <div className="flex items-center gap-3 text-xs text-white/60 flex-wrap">
                 <button
                   type="button"
                   disabled={pdfViewer.page <= 1}
@@ -743,6 +755,27 @@ export default function IntakeClient({ projectId, uploadId }: { projectId: strin
                 >
                   Next →
                 </button>
+                <div className="flex items-center gap-1 ml-2">
+                  <button
+                    type="button"
+                    disabled={zoom <= 0.5}
+                    onClick={() => setZoom((z) => Math.max(0.5, Math.round((z - 0.25) * 100) / 100))}
+                    className="border border-white/10 rounded px-2 py-1 disabled:opacity-30 hover:bg-white/10"
+                  >
+                    −
+                  </button>
+                  <span className="w-12 text-center tabular-nums">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    disabled={zoom >= 3.0}
+                    onClick={() => setZoom((z) => Math.min(3.0, Math.round((z + 0.25) * 100) / 100))}
+                    className="border border-white/10 rounded px-2 py-1 disabled:opacity-30 hover:bg-white/10"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
               <div className="overflow-auto rounded-lg border border-white/10 bg-black/30 max-h-[70vh]">
                 <canvas ref={pdfCanvasRef} className="block mx-auto" />

@@ -93,7 +93,6 @@ export default function ProjectDetailPage() {
   const [dragActive, setDragActive] = useState(false)
 
   const [purchasedRaw, setPurchasedRaw] = useState<string[]>([])
-  const [showIntakeAccess, setShowIntakeAccess] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -331,17 +330,9 @@ export default function ProjectDetailPage() {
                       <div className="text-xs text-white/60 mt-1">Reports available here.</div>
                     </div>
 
-                    {id === "document-intake-estimate-organization" && (
-                      <button
-                        onClick={() => setShowIntakeAccess((v) => !v)}
-                        className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs hover:bg-white/10"
-                      >
-                        {showIntakeAccess ? "Hide reports" : "View intake reports"}
-                      </button>
-                    )}
                   </div>
 
-                  {id === "document-intake-estimate-organization" && showIntakeAccess && (
+                  {id === "document-intake-estimate-organization" && (
                     <div className="mt-4 space-y-2">
                       {readyUploads.length === 0 ? (
                         <div className="text-sm text-white/60">No READY uploads yet.</div>

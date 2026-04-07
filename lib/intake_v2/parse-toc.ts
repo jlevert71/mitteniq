@@ -33,7 +33,10 @@ const DOT_LEADER_RE = /^(.{4,80}?)\s*\.{2,}\s*([A-Z0-9][\w-]*\d)\s*$/
 const TOC_HEADER_RE = /\b(TABLE\s+OF\s+CONTENTS?|SECTION\s+00\s+01\s+10)\b/i
 
 // Body section header for PDF page resolution
-const BODY_SECTION_HEADER_RE = /^SECTION\s+(\d{2}\s\d{2}\s\d{2}|\d{5,6})\b/i
+const BODY_SECTION_HEADER_RE = /^SECTION\s+(\d{2}\s\d{2}\s\d{2}|\d{2}\s\d{4}(?:\.\d+)?|\d{5,6})\b/i
+
+// Page stamp fallback: "001100 - 1" style footer found in C2AE/Tawas format docs
+const PAGE_STAMP_RE = /\b(\d{6})\s*-\s*[a-z0-9ivxlcdm]+\b/i
 
 function normalizeSectionNumber(raw: string): string {
   const digits = raw.replace(/\s+/g, "")
@@ -155,15 +158,36 @@ function resolvePdfPageNumbers(
   const sectionPageMap = new Map<string, number>()
 
   for (const page of pages) {
-    const lines = splitIntoLines(page.fullText).slice(0, 8)
-    for (const line of lines) {
+    const lines = splitIntoLines(page.fullText)
+
+    // Primary scan: look for "SECTION XX XX XX" style header in first 8 lines
+    let matched = false
+    for (const line of lines.slice(0, 8)) {
       const m = BODY_SECTION_HEADER_RE.exec(line.trim())
       if (m && m[1]) {
         const normalized = normalizeSectionNumber(m[1])
         if (!sectionPageMap.has(normalized)) {
           sectionPageMap.set(normalized, page.pageNumber)
         }
+        matched = true
         break
+      }
+    }
+
+    // Fallback scan: look for "XXXXXX - N" page stamp anywhere in first 8 lines.
+    // Used in C2AE/Tawas EJCDC format where the stamp appears in the copyright
+    // header block on every page, e.g. "Page 1 of 10 002113 - 1".
+    // sectionPageMap.has() ensures only the first occurrence (lowest page) wins.
+    if (!matched) {
+      for (const line of lines.slice(0, 8)) {
+        const m = PAGE_STAMP_RE.exec(line.trim())
+        if (m && m[1]) {
+          const normalized = normalizeSectionNumber(m[1])
+          if (!sectionPageMap.has(normalized)) {
+            sectionPageMap.set(normalized, page.pageNumber)
+          }
+          break
+        }
       }
     }
   }

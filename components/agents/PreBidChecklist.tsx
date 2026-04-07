@@ -226,6 +226,104 @@ export default function PreBidChecklist({ uploadId }: Props) {
     }
   }, [uploadId, addProgress])
 
+  function downloadPdf() {
+    if (!fields) return
+    const f = fields
+
+    function yesNo(v: boolean | null): string {
+      if (v === true) return "YES"
+      if (v === false) return "NO"
+      return "Not found in document"
+    }
+
+    function val(v: string | number | null | undefined): string {
+      if (v === null || v === undefined || v === "") return "Not found in document"
+      return String(v)
+    }
+
+    const rows: { label: string; value: string; note?: string; warning?: string }[] = [
+      { label: "Project Name", value: val(f.projectName) },
+      { label: "Bid Due Date", value: val(f.bidDueDate) },
+      { label: "Bid Due Time", value: val(f.bidDueTime) },
+      { label: "Bid Opening", value: val(f.bidOpeningType) },
+      { label: "Bidding To", value: val(f.biddingTo) },
+      { label: "Deliver Bid To", value: val(f.deliverBidTo) },
+      { label: "Delivery Method", value: val(f.deliveryMethod) },
+      { label: "# of Copies", value: val(f.numberOfCopies) },
+      { label: "Documents Available At", value: val(f.documentsAvailableAt) },
+      { label: "Last RFI Date", value: val(f.lastRfiDate) },
+      { label: "Pre-Bid Held", value: yesNo(f.preBidHeld) },
+      ...(f.preBidHeld === true ? [
+        { label: "Pre-Bid Mandatory", value: yesNo(f.preBidMandatory) },
+        { label: "Mandatory For", value: f.preBidMandatoryScope === "primes_and_subs" ? "Primes & Subcontractors" : f.preBidMandatoryScope === "primes_only" ? "Prime bidders only" : "Not found in document" },
+        { label: "Pre-Bid Date", value: val(f.preBidDate) },
+        { label: "Pre-Bid Time", value: val(f.preBidTime) },
+        { label: "Pre-Bid Location", value: val(f.preBidLocation) },
+      ] : []),
+      { label: "Proposed Start", value: val(f.proposedStartDate) },
+      { label: "Proposed Completion", value: val(f.proposedCompletionDate) },
+      { label: "Unit Pricing Required", value: yesNo(f.unitPricing) },
+      { label: "Alternates", value: yesNo(f.alternates), ...(f.alternates === true && f.alternatesCount !== null ? { note: `Count: ${f.alternatesCount}` } : {}), ...(f.alternates === true && f.alternatesDescription ? { note: f.alternatesDescription } : {}) },
+      { label: "Allowances", value: yesNo(f.allowances), ...(f.allowanceItems.length > 0 ? { note: f.allowanceItems.map(i => `${i.description} — ${i.amount}`).join("\n") } : {}) },
+      { label: "Breakdowns Required", value: yesNo(f.breakDownsRequired) },
+      { label: "Bid Bond Required", value: yesNo(f.bidBondRequired) },
+      ...(f.bidBondRequired === true ? [{ label: "Bid Bond Amount", value: val(f.bidBondAmount) }] : []),
+      { label: "PLM Bonds", value: yesNo(f.plmBonds), ...(f.plmBonds === true ? { note: "If prime requires sub bonds, add 3% to proposal." } : {}) },
+      { label: "Obligee", value: val(f.obligee), ...(f.bidBondRequired === true && f.obligee === null && f.biddingTo !== null ? { warning: `Obligee not stated — likely: ${f.biddingTo}. Verify before submitting bond application.` } : {}) },
+      { label: "Liquidated Damages", value: yesNo(f.liquidatedDamages) },
+      ...(f.liquidatedDamages === true ? [{ label: "LD Amount / Terms", value: val(f.liquidatedDamagesAmount) }] : []),
+      { label: "Special Insurance", value: yesNo(f.specialInsuranceRequired) },
+      ...(f.specialInsuranceRequired === true ? [{ label: "Insurance Type", value: val(f.specialInsuranceType) }] : []),
+      { label: "Certified Payroll", value: yesNo(f.certifiedPayroll), ...(f.certifiedPayroll === true ? { note: "Davis-Bacon applies. Certified payroll records required throughout project." } : {}) },
+      { label: "Buy American", value: yesNo(f.buyAmerican), ...(f.buyAmerican === true ? { note: "All iron and steel must be domestically produced unless a waiver is approved." } : {}) },
+      { label: "DBE / SBE Required", value: yesNo(f.dbeSbeRequired), ...(f.dbeSbeRequired === true && f.dbeSbeGoalPercent ? { note: `Participation goal: ${f.dbeSbeGoalPercent}` } : {}) },
+    ]
+
+    const rowsHtml = rows.map(r => `
+      <tr>
+        <td class="label">${r.label}</td>
+        <td class="value">
+          ${r.value}
+          ${r.note ? `<div class="note">${r.note.replace(/\n/g, "<br/>")}</div>` : ""}
+          ${r.warning ? `<div class="warning">⚠ ${r.warning}</div>` : ""}
+        </td>
+      </tr>
+    `).join("")
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Pre-Bid Checklist — ${f.projectName ?? "MittenIQ"}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 24px; }
+  h1 { font-size: 15px; font-weight: bold; margin-bottom: 2px; }
+  .subtitle { font-size: 10px; color: #555; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  tr { border-bottom: 1px solid #ddd; }
+  td { padding: 5px 8px; vertical-align: top; }
+  .label { width: 200px; font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.04em; padding-top: 7px; }
+  .value { font-size: 11px; color: #111; }
+  .note { margin-top: 3px; font-size: 10px; color: #444; font-style: italic; }
+  .warning { margin-top: 3px; font-size: 10px; color: #7a5c00; background: #fff8e1; border: 1px solid #f0c040; padding: 3px 6px; border-radius: 3px; }
+  @media print { body { margin: 12px; } }
+</style>
+</head>
+<body>
+<h1>Pre-Bid Checklist</h1>
+<div class="subtitle">Generated by MittenIQ · ${new Date().toLocaleDateString()}</div>
+<table>${rowsHtml}</table>
+</body>
+</html>`
+
+    const w = window.open("", "_blank")
+    if (!w) return
+    w.document.write(html)
+    w.document.close()
+    w.focus()
+    setTimeout(() => w.print(), 400)
+  }
+
   const f = fields ?? emptyPreBidChecklistFields()
   const hasRun = fields !== null
 
@@ -256,7 +354,16 @@ export default function PreBidChecklist({ uploadId }: Props) {
           </button>
 
           {hasRun && !loading && (
-            <span className="text-xs text-emerald-400 font-medium">✓ Saved</span>
+            <>
+              <button
+                type="button"
+                onClick={downloadPdf}
+                className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
+              >
+                Download PDF
+              </button>
+              <span className="text-xs text-emerald-400 font-medium">✓ Saved</span>
+            </>
           )}
         </div>
       </div>
